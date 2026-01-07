@@ -1,5 +1,6 @@
-frequency_plan.py
-
+#frequency_plan.py
+import spidev
+import time
 from dataclasses import dataclass
 
 @dataclass
