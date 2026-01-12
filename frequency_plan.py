@@ -1,137 +1,126 @@
-#frequency_plan.py
-import spidev
-import time
-from dataclasses import dataclass
+# frequency_plan.py
+#
+# Integer-N frequency planner for LMX2820
+#
+# Responsibilities:
+# - Validate requested frequency
+# - Select band and signal path
+# - Compute VCO frequency
+# - Compute integer PLL N
+# - Select legal channel divider
+#
+# Does NOT:
+# - Touch registers
+# - Control GPIO
+# - Know about FSM or SPI
 
-@dataclass
-class FrequencyPlan:
-    freq_ghz: float
-    mode: int
-    pll_n: int
-    pll_num: int
-    pll_den: int
-    chdiv: int
-    outa_mux: int
 
-def compute_frequency_plan(freq_ghz, fref_mhz=100):
+# ------------------------------------------------------------
+# Constants
+# ------------------------------------------------------------
+
+F_REF_HZ = 100_000_000      # 100 MHz reference
+STEP_HZ  = 100_000_000      # 100 MHz frequency step
+
+# LMX2820 VCO range
+VCO_MIN_HZ = 5_650_000_000
+VCO_MAX_HZ = 11_300_000_000
+
+# Allowed channel divider values
+ALLOWED_CHDIV = {1, 2, 4, 8, 16}
+
+
+# ------------------------------------------------------------
+# Frequency Planner
+# ------------------------------------------------------------
+
+def compute_frequency_plan_integer_n(freq_hz: int) -> dict:
     """
-    Integer-N frequency planner for LMX2820.
-    Enforces 100 MHz step size.
+    Compute an integer-N frequency plan for the LMX2820.
+
+    Returns a dictionary compatible with lmx2820.py:
+        {
+            "N": int,
+            "chdiv": int,
+            "outa_mux": int,
+            "band": str,
+            "power": int
+        }
     """
 
-    if not (1.0 <= freq_ghz <= 40.0):
-        raise ValueError("Frequency out of range (1–40 GHz)")
+    # ----------------------------
+    # Basic validation
+    # ----------------------------
 
-    freq_mhz = freq_ghz * 1000.0
+    if freq_hz < 1_000_000_000 or freq_hz > 40_000_000_000:
+        raise ValueError("Frequency must be between 1 and 40 GHz")
 
-    # Enforce 100 MHz step size
-    if freq_mhz % fref_mhz != 0:
-        raise ValueError(
-            "Integer-N mode requires frequency steps of 100 MHz"
-        )
+    if freq_hz % STEP_HZ != 0:
+        raise ValueError("Frequency must be in 100 MHz steps")
 
-    # --------------------------------------------------
-    # Output mode selection
-    # --------------------------------------------------
+    # ----------------------------
+    # Band selection
+    # ----------------------------
 
-    # Mode 1: 1–10 GHz → CHDIV
-    if freq_ghz <= 10.0:
-        mode = 1
-        outa_mux = 0      # CHDIV
-        ext_mult = 2
-        int_mult = 1
+    if freq_hz <= 10_000_000_000:
+        band = "1_10"
+        outa_mux = 0
+        post_mult = 1
 
-        # Choose CHDIV so VCO stays ~8 GHz
-        vco_target_mhz = 8000
-        chdiv = int(round((vco_target_mhz * ext_mult) / freq_mhz))
-        vco_mhz = freq_mhz * chdiv / ext_mult
+    elif freq_hz <= 22_000_000_000:
+        band = "10_22"
+        outa_mux = 1
+        post_mult = 1
 
-    # Mode 2: 10–22 GHz → VCO direct
-    elif freq_ghz <= 22.0:
-        mode = 2
-        outa_mux = 1      # VCO
-        ext_mult = 2
-        int_mult = 1
-        chdiv = 1
+    elif freq_hz <= 32_000_000_000:
+        band = "22_32"
+        outa_mux = 2
+        post_mult = 2   # external doubler
 
-        vco_mhz = freq_mhz / ext_mult
-
-    # Mode 3: 22–32 GHz → internal doubler
-    elif freq_ghz <= 32.0:
-        mode = 3
-        outa_mux = 2      # DOUBLER
-        ext_mult = 2
-        int_mult = 2
-        chdiv = 1
-
-        vco_mhz = freq_mhz / (ext_mult * int_mult)
-
-    # Mode 4: 32–40 GHz → internal doubler
     else:
-        mode = 4
-        outa_mux = 2      # DOUBLER
-        ext_mult = 2
-        int_mult = 2
-        chdiv = 1
+        band = "32_40"
+        outa_mux = 3
+        post_mult = 2   # external doubler
 
-        vco_mhz = freq_mhz / (ext_mult * int_mult)
+    # ----------------------------
+    # VCO + divider selection
+    # ----------------------------
 
-    # --------------------------------------------------
-    # Integer-N PLL calculation
-    # --------------------------------------------------
+    # Try legal CHDIV values until VCO is in range
+    for chdiv in sorted(ALLOWED_CHDIV):
+        vco_hz = freq_hz * chdiv / post_mult
 
-    pll_n = int(vco_mhz / fref_mhz)
+        if VCO_MIN_HZ <= vco_hz <= VCO_MAX_HZ:
+            break
+    else:
+        raise RuntimeError("No valid VCO configuration found")
 
-    # Verify exact integer-N
-    if pll_n * fref_mhz != vco_mhz:
-        raise ValueError(
-            "Frequency cannot be generated exactly in integer-N mode"
-        )
+    # ----------------------------
+    # PLL N calculation (integer-N)
+    # ----------------------------
 
-    pll_num = 0
-    pll_den = 1
+    if vco_hz % F_REF_HZ != 0:
+        raise RuntimeError("VCO frequency not integer-multiple of reference")
 
-    return FrequencyPlan(
-        freq_ghz=freq_ghz,
-        mode=mode,
-        pll_n=pll_n,
-        pll_num=pll_num,
-        pll_den=pll_den,
-        chdiv=chdiv,
-        outa_mux=outa_mux
-    )
+    pll_n = int(vco_hz / F_REF_HZ)
 
-def apply_field_to_image(self, field, value):
-    info = REGISTER_MAP[field]
+    if pll_n < 1:
+        raise RuntimeError("Invalid PLL N value")
 
-    # Multi-register (16-bit) fields
-    if isinstance(info["reg"], tuple):
-        msb_reg, lsb_reg = info["reg"]
-        self.reg_image[msb_reg] = (value >> 8) & 0xFF
-        self.reg_image[lsb_reg] = value & 0xFF
-        return [msb_reg, lsb_reg]
+    # ----------------------------
+    # Output power (static for now)
+    # ----------------------------
 
-    # Bitfield inside a single register
-    reg = info["reg"]
-    msb = info["msb"]
-    lsb = info["lsb"]
+    power = 0x20   # mid-scale default
 
-    mask = ((1 << (msb - lsb + 1)) - 1) << lsb
-    self.reg_image[reg] &= ~mask
-    self.reg_image[reg] |= (value << lsb) & mask
+    # ----------------------------
+    # Return plan
+    # ----------------------------
 
-    return [reg]
-
-def apply_frequency_plan(self, plan):
-    touched_registers = set()
-
-    for field, value in plan.items():
-        regs = self.apply_field_to_image(field, value)
-        touched_registers.update(regs)
-
-    # Write only modified registers to hardware
-    for reg in sorted(touched_registers):
-        self.write_reg(reg, self.reg_image[reg])
-
-    # Trigger calibration (FCAL)
-    self.write_reg(0, self.reg_image[0] | 0x0010)
+    return {
+        "N": pll_n,
+        "chdiv": chdiv,
+        "outa_mux": outa_mux,
+        "band": band,
+        "power": power,
+    }
