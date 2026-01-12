@@ -79,7 +79,7 @@ def compute_frequency_plan_integer_n(freq_hz: int) -> dict:
 
     else:
         band = "32_40"
-        outa_mux = 3
+        outa_mux = 2
         post_mult = 2   # external doubler
 
     # ----------------------------
