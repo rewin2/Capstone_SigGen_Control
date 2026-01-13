@@ -1,18 +1,21 @@
 # lmx2820.py
 #
-# Device driver for TI LMX2820
+# Device driver for the TI LMX2820
 #
 # Responsibilities:
-# - Own register image
+# - Own the register image
 # - Apply frequency plans safely
-# - Control GPIO RF paths
-# - Write registers via SPI
+# - Enforce PLL write ordering
+# - Trigger VCO calibration
+# - Verify lock before RF enable
 #
 # Does NOT:
-# - Know FSM states
-# - Accept user input
-# - Perform sequencing decisions
+# - Perform PLL math (frequency_plan.py)
+# - Manage system state (fsm.py)
+# - Expose user APIs (api.py)
 
+
+import time
 
 from frequency_plan import compute_frequency_plan_integer_n
 from utils import load_register_image_from_text
@@ -27,12 +30,11 @@ class LMX2820:
         # Shadow register image (R0–R122)
         self.reg_image = [0] * 123
 
-        # Cached plan
         self.current_plan = None
 
-    # ------------------------------------------------------------
-    # Power / Reset
-    # ------------------------------------------------------------
+    # ============================================================
+    # Power & Reset
+    # ============================================================
 
     def power_on(self):
         self.gpio.power_enable(True)
@@ -45,20 +47,24 @@ class LMX2820:
     def reset(self):
         self.power_off()
 
-    # ------------------------------------------------------------
+    # ============================================================
     # Initialization
-    # ------------------------------------------------------------
+    # ============================================================
 
     def initialize_registers(self):
+        """
+        Load and write the default TI register image.
+        Static configuration only.
+        """
         self.reg_image = load_register_image_from_text(
-            "data/HexRegisterValuesInitialState.txt",
+            "data/HexRegisterValues_default.txt",
             num_registers=123
         )
-        self._write_register_image()
+        self._write_static_registers()
 
-    # ------------------------------------------------------------
-    # RF Control
-    # ------------------------------------------------------------
+    # ============================================================
+    # RF Output Control
+    # ============================================================
 
     def rf_enable(self, enable: bool):
         self.reg_image[R_RFOUTA_EN] = set_field(
@@ -67,37 +73,37 @@ class LMX2820:
             RFOUTA_EN_SHIFT,
             1 if enable else 0
         )
+
         self.spi.write(R_RFOUTA_EN, self.reg_image[R_RFOUTA_EN])
         self.gpio.rf_enable(enable)
 
-    # ------------------------------------------------------------
+    # ============================================================
     # Frequency Planning
-    # ------------------------------------------------------------
+    # ============================================================
 
     def compute_frequency_plan(self, freq_hz: int):
-        plan = compute_frequency_plan_integer_n(freq_hz)
-        self.current_plan = plan
-        return plan
+        self.current_plan = compute_frequency_plan_integer_n(freq_hz)
+        return self.current_plan
 
-    # ------------------------------------------------------------
+    # ============================================================
     # Apply Frequency Plan
-    # ------------------------------------------------------------
+    # ============================================================
 
     def apply_frequency_plan(self, plan: dict):
         """
-        Apply a computed frequency plan:
-        - Configure RF switches
+        Apply a frequency plan safely:
+        - Configure RF path GPIOs
         - Update register image
-        - Write registers
+        - Program PLL with calibration and lock checking
         """
 
         self._configure_rf_path(plan)
         self._update_registers_from_plan(plan)
-        self._write_register_image()
+        self._write_frequency_sequence()
 
-    # ------------------------------------------------------------
-    # RF Path Configuration
-    # ------------------------------------------------------------
+    # ============================================================
+    # RF Path Configuration (GPIO)
+    # ============================================================
 
     def _configure_rf_path(self, plan):
         band = plan["band"]
@@ -121,24 +127,16 @@ class LMX2820:
         else:
             raise ValueError(f"Unknown frequency band: {band}")
 
-    # ------------------------------------------------------------
-    # Register Updates (SAFE)
-    # ------------------------------------------------------------
+    # ============================================================
+    # Register Image Updates (frequency only)
+    # ============================================================
 
     def _update_registers_from_plan(self, plan):
         """
-        Update only the required bitfields based on the frequency plan.
+        Update ONLY frequency-related fields.
         """
 
-        # PLL N
-        self.reg_image[R_PLL_N] = set_field(
-            self.reg_image[R_PLL_N],
-            PLL_N_MASK,
-            PLL_N_SHIFT,
-            plan["N"]
-        )
-
-        # Integer-N mode → NUM = 0, DEN = 1
+        # Integer-N configuration
         self.reg_image[R_PLL_NUM] = set_field(
             self.reg_image[R_PLL_NUM],
             PLL_NUM_MASK,
@@ -153,7 +151,14 @@ class LMX2820:
             1
         )
 
-        # Channel Divider
+        self.reg_image[R_PLL_N] = set_field(
+            self.reg_image[R_PLL_N],
+            PLL_N_MASK,
+            PLL_N_SHIFT,
+            plan["N"]
+        )
+
+        # Channel divider
         self.reg_image[R_CHDIV] = set_field(
             self.reg_image[R_CHDIV],
             CHDIV_MASK,
@@ -161,7 +166,7 @@ class LMX2820:
             plan["chdiv"]
         )
 
-        # Output Mux
+        # Output mux
         self.reg_image[R_OUTA_MUX] = set_field(
             self.reg_image[R_OUTA_MUX],
             OUTA_MUX_MASK,
@@ -169,7 +174,7 @@ class LMX2820:
             plan["outa_mux"]
         )
 
-        # Output Power
+        # Output power
         self.reg_image[R_RFOUTA_PWR] = set_field(
             self.reg_image[R_RFOUTA_PWR],
             RFOUTA_PWR_MASK,
@@ -177,26 +182,116 @@ class LMX2820:
             plan.get("power", 0x20)
         )
 
-    # ------------------------------------------------------------
-    # SPI Write Logic
-    # ------------------------------------------------------------
+    # ============================================================
+    # PLL Write Ordering (Steps 2–4)
+    # ============================================================
 
-    def _write_register_image(self):
+    # ----------------------------
+    # Register groups
+    # ----------------------------
+
+    STATIC_REGS = [
+        # Written once via default image
+    ]
+
+    FREQ_REGS = [
+        R_PLL_NUM,
+        R_PLL_DEN,
+        R_PLL_N,
+        R_CHDIV,
+        R_OUTA_MUX,
+    ]
+
+    OUTPUT_REGS = [
+        R_RFOUTA_PWR,
+        R_RFOUTA_EN,
+    ]
+
+    # ----------------------------
+    # Register write helpers
+    # ----------------------------
+
+    def _write_reg_list(self, reg_list):
+        for reg in reg_list:
+            self.spi.write(reg, self.reg_image[reg])
+
+    def _write_static_registers(self):
         """
-        Write entire register image to hardware.
+        Write full static register image at startup.
         """
         for reg, value in enumerate(self.reg_image):
             self.spi.write(reg, value)
 
-    # ------------------------------------------------------------
+    # ----------------------------
+    # Calibration
+    # ----------------------------
+
+    def _trigger_vco_calibration(self):
+        """
+        Pulse the VCO calibration bit.
+        """
+
+        # Set calibration bit
+        self.reg_image[R_VCO_CAL] = set_field(
+            self.reg_image[R_VCO_CAL],
+            VCO_CAL_MASK,
+            VCO_CAL_SHIFT,
+            1
+        )
+        self.spi.write(R_VCO_CAL, self.reg_image[R_VCO_CAL])
+
+        time.sleep(0.001)
+
+        # Clear calibration bit
+        self.reg_image[R_VCO_CAL] = set_field(
+            self.reg_image[R_VCO_CAL],
+            VCO_CAL_MASK,
+            VCO_CAL_SHIFT,
+            0
+        )
+        self.spi.write(R_VCO_CAL, self.reg_image[R_VCO_CAL])
+
+    # ----------------------------
+    # Frequency programming sequence
+    # ----------------------------
+
+    def _write_frequency_sequence(self):
+        """
+        Safely reprogram the PLL and enable RF output.
+        """
+
+        # Ensure RF is disabled during reprogramming
+        self.rf_enable(False)
+
+        # Write frequency-defining registers
+        self._write_reg_list(self.FREQ_REGS)
+
+        # Allow divider logic to settle
+        time.sleep(0.001)
+
+        # Trigger VCO calibration
+        self._trigger_vco_calibration()
+
+        # Allow calibration to complete
+        time.sleep(0.005)
+
+        # Verify lock
+        if not self.wait_for_lock(timeout_ms=50):
+            raise RuntimeError("PLL failed to lock")
+
+        # Enable RF output
+        self._write_reg_list(self.OUTPUT_REGS)
+
+    # ============================================================
     # Lock Detection
-    # ------------------------------------------------------------
+    # ============================================================
+
+    def is_locked(self):
+        return self.gpio.read_lock_detect()
 
     def wait_for_lock(self, timeout_ms=100):
         for _ in range(timeout_ms):
             if self.is_locked():
                 return True
+            time.sleep(0.001)
         return False
-
-    def is_locked(self):
-        return self.gpio.read_lock_detect()
