@@ -2,7 +2,7 @@
 #
 # Device driver for the TI LMX2820
 #
-# Responsibilities:
+# Responsibilities6:
 # - Own the register image
 # - Apply frequency plans safely
 # - Enforce PLL write ordering
@@ -20,6 +20,10 @@ import time
 from frequency_plan import compute_frequency_plan_integer_n
 from utils import load_register_image_from_text
 from register_map import *
+
+class PLLLockError(Exception):
+    """PLL failed to lock after retries."""
+    pass
 
 
 class LMX2820:
@@ -257,8 +261,10 @@ class LMX2820:
 
     def _write_frequency_sequence(self):
         """
-        Safely reprogram the PLL and enable RF output.
+        Safely reprogram the PLL with retries and error escalation.
         """
+
+        MAX_RETRIES = 3
 
         # Ensure RF is disabled during reprogramming
         self.rf_enable(False)
@@ -269,18 +275,27 @@ class LMX2820:
         # Allow divider logic to settle
         time.sleep(0.001)
 
-        # Trigger VCO calibration
-        self._trigger_vco_calibration()
+        for attempt in range(1, MAX_RETRIES + 1):
 
-        # Allow calibration to complete
-        time.sleep(0.005)
+            # Trigger VCO calibration
+            self._trigger_vco_calibration()
 
-        # Verify lock
-        if not self.wait_for_lock(timeout_ms=50):
-            raise RuntimeError("PLL failed to lock")
+            # Allow calibration to complete
+            time.sleep(0.005)
 
-        # Enable RF output
-        self._write_reg_list(self.OUTPUT_REGS)
+            # Check lock
+            if self.wait_for_lock(timeout_ms=50):
+                # Success
+                self._write_reg_list(self.OUTPUT_REGS)
+                return
+
+            # Retry path
+            time.sleep(0.002)
+
+        # If we reach here, PLL failed to lock
+        self.rf_enable(False)
+        raise PLLLockError("PLL failed to lock after retries")
+
 
     # ============================================================
     # Lock Detection
