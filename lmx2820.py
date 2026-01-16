@@ -61,7 +61,7 @@ class LMX2820:
         Static configuration only.
         """
         self.reg_image = load_register_image_from_text(
-            "data/HexRegisterValues_default.txt",
+            "data/HexRegisterValuesInitialState.txt",
             num_registers=123
         )
         self._write_static_registers()
