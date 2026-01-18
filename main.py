@@ -17,7 +17,7 @@
 from spi import MockSPI, RealSPI
 from gpio import MockGPIO, RealGPIO
 from lmx2820 import LMX2820
-from fsm import LMX2820FSM
+from fsm import RFFSM
 
 
 # ------------------------------------------------------------
@@ -70,13 +70,13 @@ def main():
     pll = LMX2820(spi=spi, gpio=gpio)
 
     # Create FSM
-    fsm = LMX2820FSM(pll)
+    fsm = RFFSM(pll)
 
     # ----------------------------
     # Startup sequence
     # ----------------------------
     print("[SYSTEM] Starting up")
-    fsm.startup()
+    fsm.power_on()
 
     # ----------------------------
     # Standby (RF off)
