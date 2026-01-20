@@ -29,10 +29,22 @@ REF_DIV_REG              = 11   # R11 Reference divider
 # PLL Core
 # ============================================================
 
-PLL_N_REG                = 36   # R36 PLL integer divider (N)
-PLL_NUM_REG              = 37   # R37 PLL fractional numerator
-PLL_DEN_REG              = 38   # R38 PLL fractional denominator
+# Integer Divider N (19 bits)
+PLL_N_LSB_REG = 36   # R36 N[15:0]
+PLL_N_MSB_REG = 37   # R37 N[18:16]
 
+# Fractional Numerator (24 bits)
+PLL_NUM_LSB_REG = 38  # R38 NUM[15:0]
+PLL_NUM_MSB_REG = 39  # R39 NUM[23:16]
+
+# Fractional Denominator (24 bits)
+PLL_DEN_LSB_REG = 40  # R40 DEN[15:0]
+PLL_DEN_MSB_REG = 41  # R41 DEN[23:16]
+
+# Fractional Mode Control
+PLL_FRAC_CTRL_REG = 42
+PLL_FRAC_EN_MASK  = 0x1
+PLL_FRAC_EN_SHIFT = 0
 
 # ============================================================
 # Output / Divider Path
