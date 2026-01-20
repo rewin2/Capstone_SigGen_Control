@@ -58,29 +58,56 @@ def compute_frequency_plan_integer_n(freq_hz: int) -> dict:
     if freq_hz % STEP_HZ != 0:
         raise ValueError("Frequency must be in 100 MHz steps")
 
-    # ----------------------------
-    # Band selection
-    # ----------------------------
-
+    # ------------------------------------------------------------
+    # 1–10 GHz: VCO ÷ CHDIV → OUTA_MUX = 0
+    # ------------------------------------------------------------
     if freq_hz <= 10_000_000_000:
         band = "1_10"
-        outa_mux = 0
-        post_mult = 1
+        outa_mux = 0  # divider path
 
-    elif freq_hz <= 22_000_000_000:
+        for chdiv in (1, 2, 4, 8, 16):
+            vco_hz = freq_hz * chdiv
+            if VCO_MIN <= vco_hz <= VCO_MAX:
+                break
+        else:
+            raise FrequencyPlanError("No valid VCO frequency for 1–10 GHz")
+
+    # ------------------------------------------------------------
+    # 10–11.3 GHz: VCO direct → OUTA_MUX = 1
+    # ------------------------------------------------------------
+    elif freq_hz <= 11_300_000_000:
         band = "10_22"
-        outa_mux = 2
-        post_mult = 1
+        chdiv = 1
+        outa_mux = 1  # direct VCO
+        vco_hz = freq_hz
 
-    elif freq_hz <= 32_000_000_000:
-        band = "22_32"
-        outa_mux = 2
-        post_mult = 2   # external doubler
+        if not (VCO_MIN <= vco_hz <= VCO_MAX):
+            raise FrequencyPlanError("VCO out of range (direct mode)")
 
+    # ------------------------------------------------------------
+    # 11.3–22.6 GHz: internal VCO doubler → OUTA_MUX = 2
+    # ------------------------------------------------------------
+    elif freq_hz <= 22_600_000_000:
+        band = "10_22"
+        chdiv = 1
+        outa_mux = 2  # VCO ×2
+        vco_hz = freq_hz / 2
+
+        if not (VCO_MIN <= vco_hz <= VCO_MAX):
+            raise FrequencyPlanError("VCO out of range (internal doubler)")
+
+    # ------------------------------------------------------------
+    # 22.6–40 GHz: internal ×2 + external ×2
+    # ------------------------------------------------------------
     else:
-        band = "32_40"
-        outa_mux = 2
-        post_mult = 2   # external doubler
+        band = "22_40"
+        chdiv = 1
+        outa_mux = 2  # VCO ×2
+        external_doubler = True
+        vco_hz = freq_hz / 4
+
+        if not (VCO_MIN <= vco_hz <= VCO_MAX):
+            raise FrequencyPlanError("VCO out of range (external doubler path)")
 
     # ----------------------------
     # VCO + divider selection
