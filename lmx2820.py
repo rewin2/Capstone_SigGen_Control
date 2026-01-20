@@ -173,7 +173,7 @@ class LMX2820:
             self.reg_image[RFOUTA_PWR_REG],
             RFOUTA_PWR_MASK,
             RFOUTA_PWR_SHIFT,
-            plan.get("power", 0x20),
+            plan.get("power", 0x7),
         )
 
     # ------------------------------------------------------------

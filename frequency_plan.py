@@ -19,7 +19,7 @@
 # Constants
 # ------------------------------------------------------------
 
-F_REF_HZ = 100_000_000      # 100 MHz reference
+F_REF_HZ = 200_000_000      # 100 MHz reference
 STEP_HZ  = 100_000_000      # 100 MHz frequency step
 
 # LMX2820 VCO range
@@ -108,19 +108,24 @@ def compute_frequency_plan_integer_n(freq_hz: int) -> dict:
         raise RuntimeError("Invalid PLL N value")
 
     # ----------------------------
-    # Output power (static for now)
+    # Power
     # ----------------------------
+    power = 0x7
 
-    power = 0x20   # mid-scale default
 
     # ----------------------------
     # Return plan
     # ----------------------------
+    print("VCO: ", vco_hz)
+    print("N: ", pll_n)
+    print("chdiv: ", chdiv)
+    print("outa_mux: ", outa_mux)
+    print("power: ", power)
 
     return {
         "N": pll_n,
         "chdiv": chdiv,
         "outa_mux": outa_mux,
         "band": band,
-        "power": power,
+        "power": power
     }
