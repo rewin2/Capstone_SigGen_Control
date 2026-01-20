@@ -119,7 +119,7 @@ class RFFSM:
 
     def _enter_error_state(self, reason: str):
         self.device.rf_enable(False)
-        #self.device.log_error(reason)
+        self.device.log_error(reason)
         self.state = RFState.ERROR
 
     # ============================================================
