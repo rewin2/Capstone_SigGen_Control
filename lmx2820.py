@@ -134,27 +134,47 @@ class LMX2820:
     # ------------------------------------------------------------
 
     def _update_registers_from_plan(self, plan):
-        self.reg_image[PLL_N_REG] = set_field(
-            self.reg_image[PLL_N_REG],
-            PLL_N_MASK,
-            PLL_N_SHIFT,
-            plan["N"],
-        )
+        """
+        Update PLL-related registers from frequency plan.
+        Correctly handles split PLL registers (N, NUM, DEN).
+        Integer-N mode only.
+        """
 
-        self.reg_image[PLL_NUM_REG] = set_field(
-            self.reg_image[PLL_NUM_REG],
-            PLL_NUM_MASK,
-            PLL_NUM_SHIFT,
+        # ------------------------------------------------------------
+        # Integer Divider N (19 bits)
+        # ------------------------------------------------------------
+        N = plan["N"]
+
+        self.reg_image[PLL_N_LSB_REG] = N & 0xFFFF
+        self.reg_image[PLL_N_MSB_REG] = (
+            self.reg_image[PLL_N_MSB_REG] & ~0x7
+        ) | ((N >> 16) & 0x7)
+
+        # ------------------------------------------------------------
+        # Fractional Numerator (NUM = 0 for integer-N)
+        # ------------------------------------------------------------
+        self.reg_image[PLL_NUM_LSB_REG] = 0x0000
+        self.reg_image[PLL_NUM_MSB_REG] = 0x0000
+
+        # ------------------------------------------------------------
+        # Fractional Denominator (DEN = 1 for integer-N)
+        # ------------------------------------------------------------
+        self.reg_image[PLL_DEN_LSB_REG] = 0x0001
+        self.reg_image[PLL_DEN_MSB_REG] = 0x0000
+
+        # ------------------------------------------------------------
+        # Explicitly disable fractional mode
+        # ------------------------------------------------------------
+        self.reg_image[PLL_FRAC_CTRL_REG] = set_field(
+            self.reg_image[PLL_FRAC_CTRL_REG],
+            PLL_FRAC_EN_MASK,
+            PLL_FRAC_EN_SHIFT,
             0,
         )
 
-        self.reg_image[PLL_DEN_REG] = set_field(
-            self.reg_image[PLL_DEN_REG],
-            PLL_DEN_MASK,
-            PLL_DEN_SHIFT,
-            1,
-        )
-
+        # ------------------------------------------------------------
+        # Channel Divider
+        # ------------------------------------------------------------
         self.reg_image[CHDIV_REG] = set_field(
             self.reg_image[CHDIV_REG],
             CHDIV_MASK,
@@ -162,6 +182,9 @@ class LMX2820:
             plan["chdiv"],
         )
 
+        # ------------------------------------------------------------
+        # Output Mux
+        # ------------------------------------------------------------
         self.reg_image[OUTA_MUX_REG] = set_field(
             self.reg_image[OUTA_MUX_REG],
             OUTA_MUX_MASK,
@@ -169,11 +192,14 @@ class LMX2820:
             plan["outa_mux"],
         )
 
+        # ------------------------------------------------------------
+        # RF Output Power
+        # ------------------------------------------------------------
         self.reg_image[RFOUTA_PWR_REG] = set_field(
             self.reg_image[RFOUTA_PWR_REG],
             RFOUTA_PWR_MASK,
             RFOUTA_PWR_SHIFT,
-            plan.get("power", 0x7),
+            plan.get("power", 0x20),
         )
 
     # ------------------------------------------------------------
