@@ -1,18 +1,16 @@
 # write_order.py
 #
-# LMX2820 register write-order definitions
+# LMX2820 register write-ordering definitions
 #
-# IMPORTANT:
-# - These are hardware sequencing rules
-# - No logic belongs here
-# - Order matters
+# These lists define STRICT hardware sequencing rules.
+# No logic belongs here.
 
 
 from register_map import *
 
 
 # ============================================================
-# A) Static configuration registers
+# Static configuration registers
 # Written once after reset
 # ============================================================
 
@@ -24,27 +22,56 @@ STATIC_REGS = [
     REF_DIV_REG,
     VCO_BIAS_REG,
     VCO_GAIN_REG,
-    # (others from default image as needed)
+    # Add other always-static registers here
 ]
 
 
 # ============================================================
-# B) Frequency-defining registers
-# Written on every frequency change
+# Frequency-defining registers
+# Written on EVERY frequency change
 # ============================================================
 
 FREQ_REGS = [
-    PLL_NUM_REG,    # Always write NUM first
-    PLL_DEN_REG,
-    PLL_N_REG,
+
+    # --------------------------------------------------------
+    # Integer Divider N (write LSB → MSB)
+    # --------------------------------------------------------
+    PLL_N_LSB_REG,
+    PLL_N_MSB_REG,
+
+    # --------------------------------------------------------
+    # Fractional Numerator (NUM) (LSB → MSB)
+    # --------------------------------------------------------
+    PLL_NUM_LSB_REG,
+    PLL_NUM_MSB_REG,
+
+    # --------------------------------------------------------
+    # Fractional Denominator (DEN) (LSB → MSB)
+    # --------------------------------------------------------
+    PLL_DEN_LSB_REG,
+    PLL_DEN_MSB_REG,
+
+    # --------------------------------------------------------
+    # Fractional mode control
+    # Must be written BEFORE calibration
+    # --------------------------------------------------------
+    PLL_FRAC_CTRL_REG,
+
+    # --------------------------------------------------------
+    # Channel Divider
+    # --------------------------------------------------------
     CHDIV_REG,
+
+    # --------------------------------------------------------
+    # Output mux selection
+    # --------------------------------------------------------
     OUTA_MUX_REG,
 ]
 
 
 # ============================================================
-# C) Calibration / trigger registers
-# Written AFTER frequency registers
+# Calibration trigger registers
+# Written AFTER all frequency registers
 # ============================================================
 
 CAL_REGS = [
@@ -53,7 +80,7 @@ CAL_REGS = [
 
 
 # ============================================================
-# D) Output enable registers
+# RF output enable / power
 # Written LAST, after lock
 # ============================================================
 
