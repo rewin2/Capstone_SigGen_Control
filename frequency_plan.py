@@ -70,7 +70,7 @@ def compute_frequency_plan_integer_n(freq_hz: int) -> dict:
     elif freq_hz <= 22_000_000_000:
         band = "10_22"
         outa_mux = 2
-        post_mult = 2
+        post_mult = 1
 
     elif freq_hz <= 32_000_000_000:
         band = "22_32"
