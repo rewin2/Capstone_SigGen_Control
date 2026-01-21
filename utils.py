@@ -107,27 +107,26 @@ def format_register_diff(diffs):
     return "\n".join(lines)
 
 def encode_chdiv(divide_ratio: int) -> int:
-    """
-    Encode CHDIV divide ratio for LMX2820.
+        """
+        Encode CHDIV divide ratio for LMX2820.
 
-    Valid divide ratios:
-      2, 4, 8, 16, 32, 64, 128
+        Valid divide ratios:
+        2, 4, 8, 16, 32, 64, 128
 
-    Returns CHDIV field value.
-    """
+        Returns CHDIV field value.
+        """
 
-    mapping = {
-        2: 0,
-        4: 1,
-        8: 2,
-        16: 3,
-        32: 4,
-        64: 5,
-        128: 6,
-    }
+        mapping = {
+            2: 0,
+            4: 1,
+            8: 2,
+            16: 3,
+            32: 4,
+            64: 5,
+            128: 6,
+        }
 
-    if divide_ratio not in mapping:
-        raise ValueError("Invalid CHDIV ratio for LMX2820")
+        if divide_ratio not in mapping:
+            raise ValueError("Invalid CHDIV ratio for LMX2820")
 
-    return mapping[divide_ratio]
-
+        return mapping[divide_ratio]
