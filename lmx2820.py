@@ -15,6 +15,7 @@ from write_order import (
 
 from frequency_plan import compute_frequency_plan_integer_n
 from utils import load_register_image_from_text
+from utils import encode_chdiv
 
 
 class PLLLockError(RuntimeError):
@@ -102,10 +103,74 @@ class LMX2820:
         self._configure_rf_path(plan)
         self._update_registers_from_plan(plan)
         self._write_frequency_sequence()
-
+    
     # ------------------------------------------------------------
     # RF Path GPIO Configuration
     # ------------------------------------------------------------
+
+    def configure_output_path(self, outa_mux: int, chdiv: int | None):  
+        """
+        Configure RFOUTA signal path safely.
+
+        outa_mux:
+            0 = divider
+            1 = direct VCO
+            2 = VCO x2
+
+        chdiv:
+            divide ratio (2,4,8,...128) or None
+        """
+
+        # ------------------------------
+        # Enforce OUTA_MUX validity
+        # ------------------------------
+        if outa_mux not in (0, 1, 2):
+            raise ValueError("Invalid OUTA_MUX value")
+
+        # ------------------------------
+        # Divider path
+        # ------------------------------
+        if outa_mux == 0:
+            if chdiv is None:
+                raise ValueError("CHDIV required when OUTA_MUX = 0")
+
+            chdiv_field = encode_chdiv(chdiv)
+
+            self.write_field(
+                CHDIV_REG,
+                CHDIV_MASK,
+                CHDIV_SHIFT,
+                chdiv_field,
+            )
+
+        # ------------------------------
+        # Direct or VCO x2 path
+        # ------------------------------
+        else:
+            if chdiv not in (None, 1):
+                raise ValueError(
+                    "CHDIV must be bypassed when OUTA_MUX != 0"
+                )
+
+            # Optional but recommended:
+            # force CHDIV field to safe value (e.g. 0)
+            self.write_field(
+                CHDIV_REG,
+                CHDIV_MASK,
+                CHDIV_SHIFT,
+                0,
+            )
+
+        # ------------------------------
+        # Program OUTA_MUX last
+        # ------------------------------
+        self.write_field(
+            OUTA_MUX_REG,
+            OUTA_MUX_MASK,
+            OUTA_MUX_SHIFT,
+            outa_mux,
+        )
+
 
     def _configure_rf_path(self, plan):
         band = plan["band"]
