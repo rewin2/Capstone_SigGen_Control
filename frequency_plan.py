@@ -23,8 +23,8 @@ F_REF_HZ = 200_000_000      # 100 MHz reference
 STEP_HZ  = 100_000_000      # 100 MHz frequency step
 
 # LMX2820 VCO range
-VCO_MIN_HZ = 5_650_000_000
-VCO_MAX_HZ = 11_300_000_000
+VCO_MIN = 5_650_000_000
+VCO_MAX = 11_300_000_000
 
 # Allowed channel divider values
 ALLOWED_CHDIV = {1, 2, 4, 8, 16}
@@ -117,7 +117,7 @@ def compute_frequency_plan_integer_n(freq_hz: int) -> dict:
     for chdiv in sorted(ALLOWED_CHDIV):
         vco_hz = freq_hz * chdiv / post_mult
 
-        if VCO_MIN_HZ <= vco_hz <= VCO_MAX_HZ:
+        if VCO_MIN <= vco_hz <= VCO_MAX:
             break
     else:
         raise RuntimeError("No valid VCO configuration found")
