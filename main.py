@@ -2,11 +2,13 @@
 
 import argparse
 import sys
+import traceback
 
-from spi.spi_driver import SPIDriver
+from spi import MockSPI
 from lmx2820 import LMX2820
 from fsm import RFFSM, RFState
-from api import RFAPI
+from api import SignalGeneratorAPI
+from gpio import MockGPIO
 
 
 def parse_frequency(freq_str: str) -> int:
@@ -24,11 +26,12 @@ def parse_frequency(freq_str: str) -> int:
         )
 
 
-def build_system() -> RFAPI:
-    spi = SPIDriver()
-    lmx = LMX2820(spi)
+def build_system() -> SignalGeneratorAPI:
+    spi = MockSPI()
+    gpio = MockGPIO()
+    lmx = LMX2820(spi, gpio)
     fsm = RFFSM(lmx)
-    api = RFAPI(fsm)
+    api = SignalGeneratorAPI(fsm)
     return api
 
 
@@ -65,6 +68,9 @@ def main():
 
     api = build_system()
 
+    api.power_on()
+
+
     try:
         if args.reset:
             api.reset()
@@ -75,18 +81,27 @@ def main():
             print(f"Frequency set to {args.freq} Hz")
 
         if args.enable:
-            api.enable_output()
+            api.rf_enable()
             print("RF output enabled")
 
         if args.disable:
-            api.disable_output()
+            api.rf_disable()
             print("RF output disabled")
 
         print(f"System state: {api.get_state().name}")
 
     except Exception as e:
-        print(f"ERROR: {e}", file=sys.stderr)
+        error_msg = (
+            f"{type(e).__name__}: {e}"
+            if str(e)
+            else f"{type(e).__name__} (no message)")
+        print("=== EXCEPTION ===")
+        print(e)
+        print("=== FSM ERROR ===")
+        print(api.get_last_error())
         sys.exit(1)
+
+    traceback.print_exc()   # <-- THIS IS CRITICAL
 
 
 if __name__ == "__main__":

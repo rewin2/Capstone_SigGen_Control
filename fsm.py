@@ -17,6 +17,7 @@
 
 from enum import Enum, auto
 from lmx2820 import PLLLockError
+import frequency_plan
 
 
 class RFState(Enum):
@@ -34,6 +35,7 @@ class RFFSM:
         self.device = device
         self.state = RFState.POWER_OFF
         self.current_freq_hz = None
+        self.last_error = None
 
     # ============================================================
     # Power Control
@@ -43,10 +45,7 @@ class RFFSM:
         if self.state != RFState.POWER_OFF:
             return
 
-        self.device.power_on()
-        self.device.initialize_registers()
-
-        # Ensure RF is disabled on entry
+        self.device.initialize_registers()   # writes defaults, resets chip
         self.device.rf_enable(False)
 
         self.state = RFState.STANDBY
@@ -77,35 +76,36 @@ class RFFSM:
         Set output frequency in Hz.
         Legal only in STANDBY or READY.
         """
-
-        if self.state == RFState.ERROR:
-            raise RuntimeError("Device in ERROR state. Reset required.")
-
+       
         if self.state not in (RFState.STANDBY, RFState.READY):
-            raise RuntimeError(f"Cannot set frequency in state {self.state}")
+            raise RuntimeError(
+                f"Cannot set frequency in state {self.state}"
+            )
 
         try:
-            # Compute plan (pure math)
-            plan = self.device.compute_frequency_plan(freq_hz)
+            self.state = RFState.CONFIGURING
 
-            # Apply plan (hardware sequencing handled by driver)
-            self.device.apply_frequency_plan(plan)
+            plan = self.device.compute_frequency_plan_integer_n(freq_hz)
+            self.device.configure_frequency(plan)
 
-            self.current_freq_hz = freq_hz
             self.state = RFState.READY
 
-        except PLLLockError as e:
-            self._enter_error_state(str(e))
-
         except Exception as e:
-            # Any unexpected error is fatal
-            self._enter_error_state(f"Unexpected error: {e}")
-
+            self._enter_error_state(str(e))
+         
     # ============================================================
     # RF Control
     # ============================================================
 
-    def disable_rf(self):
+    def rf_enable(self):
+        """
+        Explicitly enable RF output without powering down.
+        """
+        if self.state == RFState.READY:
+            self.device.rf_enable(True)
+            self.state = RFState.STANDBY
+
+    def rf_disable(self):
         """
         Explicitly disable RF output without powering down.
         """

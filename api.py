@@ -30,11 +30,10 @@ class SignalGeneratorAPI:
     # Lifecycle control
     # ------------------------------------------------------------
 
-    def start(self):
-        """
-        Power up and initialize the system.
-        """
-        self.fsm.startup()
+    def power_on(self):
+
+        self.fsm.power_on()
+
 
     def power_off(self):
         """
@@ -64,17 +63,17 @@ class SignalGeneratorAPI:
 
         self.fsm.set_frequency(freq_hz)
 
-    def enable_rf(self):
+    def rf_enable(self):
         """
         Enable RF output.
         """
-        self.fsm.enable_rf()
+        self.fsm.rf_enable()
 
-    def disable_rf(self):
+    def rf_disable(self):
         """
         Disable RF output.
         """
-        self.fsm.disable_rf()
+        self.fsm.rf_disable()
 
     # ------------------------------------------------------------
     # Status / query
