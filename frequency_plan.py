@@ -115,7 +115,7 @@ def compute_frequency_plan_integer_n(freq_hz: int) -> dict:
 
     # Try legal CHDIV values until VCO is in range
     for chdiv in sorted(ALLOWED_CHDIV):
-        vco_hz = freq_hz * chdiv / post_mult
+        vco_hz = freq_hz * chdiv / F_REF_HZ
 
         if VCO_MIN <= vco_hz <= VCO_MAX:
             break
