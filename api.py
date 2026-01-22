@@ -97,3 +97,7 @@ class SignalGeneratorAPI:
         Query PLL lock status.
         """
         return self.fsm.is_locked()
+    
+    def get_last_error(self):
+
+        return self.fsm.last_error()
