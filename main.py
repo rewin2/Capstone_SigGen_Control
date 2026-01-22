@@ -1,119 +1,92 @@
 # main.py
-#
-# Top-level entry point for LMX2820 signal generator
-#
-# Responsibilities:
-# - Select hardware backend (mock vs real)
-# - Instantiate drivers
-# - Create PLL device and FSM
-# - Provide a simple control flow
-#
-# Does NOT:
-# - Implement PLL math
-# - Know register bit meanings
-# - Manage GPIO or SPI details
 
+import argparse
+import sys
 
-from spi import MockSPI, RealSPI
-from gpio import MockGPIO, RealGPIO
+from spi.spi_driver import SPIDriver
 from lmx2820 import LMX2820
-from fsm import RFFSM
+from fsm import RFFSM, RFState
+from api import RFAPI
 
 
-# ------------------------------------------------------------
-# Configuration
-# ------------------------------------------------------------
-
-USE_MOCK_HARDWARE = True   # Set False for real hardware
-DEFAULT_FREQUENCY_HZ = 1_000_000_000  # 1 GHz
-
-
-# ------------------------------------------------------------
-# Hardware setup
-# ------------------------------------------------------------
-
-def create_hardware():
-    if USE_MOCK_HARDWARE:
-        print("[SYSTEM] Using MOCK hardware")
-        spi = MockSPI()
-        gpio = MockGPIO()
-    else:
-        print("[SYSTEM] Using REAL hardware")
-
-        # ---- SPI example (platform-specific) ----
-        # import spidev
-        # spi_dev = spidev.SpiDev()
-        # spi_dev.open(0, 0)
-        # spi = RealSPI(spi_dev)
-
-        # ---- GPIO example (platform-specific) ----
-        # import my_gpio_backend
-        # gpio_hw = my_gpio_backend.GPIO()
-        # gpio = RealGPIO(gpio_hw)
-
-        raise NotImplementedError(
-            "Real hardware backend not configured yet"
+def parse_frequency(freq_str: str) -> int:
+    """
+    Parse frequency strings like:
+      15e9
+      15000000000
+      15_000_000_000
+    """
+    try:
+        return int(float(freq_str))
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"Invalid frequency value: {freq_str}"
         )
 
-    return spi, gpio
 
+def build_system() -> RFAPI:
+    spi = SPIDriver()
+    lmx = LMX2820(spi)
+    fsm = RFFSM(lmx)
+    api = RFAPI(fsm)
+    return api
 
-# ------------------------------------------------------------
-# Main application
-# ------------------------------------------------------------
 
 def main():
-    # Create hardware drivers
-    spi, gpio = create_hardware()
+    parser = argparse.ArgumentParser(
+        description="LMX2820 RF Signal Generator CLI"
+    )
 
-    # Create PLL device
-    pll = LMX2820(spi=spi, gpio=gpio)
+    parser.add_argument(
+        "--freq",
+        type=parse_frequency,
+        help="Set output frequency (e.g. 15e9)"
+    )
 
-    # Create FSM
-    fsm = RFFSM(pll)
+    parser.add_argument(
+        "--enable",
+        action="store_true",
+        help="Enable RF output"
+    )
 
-    # ----------------------------
-    # Startup sequence
-    # ----------------------------
-    print("[SYSTEM] Starting up")
-    fsm.power_on()
+    parser.add_argument(
+        "--disable",
+        action="store_true",
+        help="Disable RF output"
+    )
 
-    # ----------------------------
-    # Standby (RF off)
-    # ----------------------------
-    print("[SYSTEM] System in standby (RF disabled)")
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Reset RF system"
+    )
 
-    # ----------------------------
-    # Set default frequency
-    # ----------------------------
-    print(f"[SYSTEM] Setting default frequency: {DEFAULT_FREQUENCY_HZ/1e9:.1f} GHz")
-    fsm.set_frequency(DEFAULT_FREQUENCY_HZ)
+    args = parser.parse_args()
 
-    print("[SYSTEM] RF output active")
+    api = build_system()
 
-    # ----------------------------
-    # Example: change frequency
-    # ----------------------------
-    while True:
-        try:
-            user_input = input("\nEnter frequency in GHz (or 'q' to quit): ")
+    try:
+        if args.reset:
+            api.reset()
+            print("System reset")
 
-            if user_input.lower() in ("q", "quit", "exit"):
-                break
+        if args.freq is not None:
+            api.set_frequency(args.freq)
+            print(f"Frequency set to {args.freq} Hz")
 
-            freq_ghz = float(user_input)
-            freq_hz = int(freq_ghz * 1e9)
+        if args.enable:
+            api.enable_output()
+            print("RF output enabled")
 
-            fsm.set_frequency(freq_hz)
+        if args.disable:
+            api.disable_output()
+            print("RF output disabled")
 
-        except Exception as e:
-            print(f"[ERROR] {e}")
+        print(f"System state: {api.get_state().name}")
 
-    # ----------------------------
-    # Power-down
-    # ----------------------------
-    print("[SYSTEM] Powering down")
-    fsm.power_off()
+    except Exception as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
