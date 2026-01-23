@@ -23,6 +23,7 @@ import frequency_plan
 class RFState(Enum):
     POWER_OFF = auto()
     STANDBY = auto()      # Powered, RF disabled, no frequency set
+    CONFIGURING = auto()
     READY = auto()        # Locked, RF enabled
     ERROR = auto()        # Fatal error, reset-only exit
 
