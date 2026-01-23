@@ -35,124 +35,97 @@ ALLOWED_CHDIV = {1, 2, 4, 8, 16}
 # ------------------------------------------------------------
 
 def compute_frequency_plan_integer_n(freq_hz: int) -> dict:
-    """
-    Compute an integer-N frequency plan for the LMX2820.
-
-    Returns a dictionary compatible with lmx2820.py:
-        {
-            "N": int,
-            "chdiv": int,
-            "outa_mux": int,
-            "band": str,
-            "power": int
-        }
-    """
-
-    # ----------------------------
-    # Basic validation
-    # ----------------------------
-
     if freq_hz < 1_000_000_000 or freq_hz > 40_000_000_000:
         raise ValueError("Frequency must be between 1 and 40 GHz")
 
     if freq_hz % STEP_HZ != 0:
         raise ValueError("Frequency must be in 100 MHz steps")
 
-    # ------------------------------------------------------------
-    # 1–10 GHz: VCO ÷ CHDIV → OUTA_MUX = 0
-    # ------------------------------------------------------------
+    # -------------------------------------------------
+    # Constants (should already exist in your file)
+    # -------------------------------------------------
+    # VCO_MIN, VCO_MAX
+    # F_REF_HZ
+
+    # -------------------------------------------------
+    # Output path selection
+    # -------------------------------------------------
+
+    external_doubler = False
+
     if freq_hz <= 10_000_000_000:
         band = "1_10"
         outa_mux = 0  # divider path
+        possible_dividers = [2, 4, 8, 16, 32, 64, 128]
 
-        for chdiv in (1, 2, 4, 8, 16):
-            vco_hz = freq_hz * chdiv
+        for div in possible_dividers:
+            vco_hz = freq_hz * div
             if VCO_MIN <= vco_hz <= VCO_MAX:
+                chdiv = div
                 break
         else:
-            raise FrequencyPlanError("No valid VCO frequency for 1–10 GHz")
+            raise FrequencyPlanError("No valid divider for 1–10 GHz")
 
-    # ------------------------------------------------------------
-    # 10–11.3 GHz: VCO direct → OUTA_MUX = 1
-    # ------------------------------------------------------------
     elif freq_hz <= 11_300_000_000:
         band = "10_22"
+        outa_mux = 1  # direct
         chdiv = 1
-        outa_mux = 1  # direct VCO
         vco_hz = freq_hz
 
         if not (VCO_MIN <= vco_hz <= VCO_MAX):
             raise FrequencyPlanError("VCO out of range (direct mode)")
 
-    # ------------------------------------------------------------
-    # 11.3–22.6 GHz: internal VCO doubler → OUTA_MUX = 2
-    # ------------------------------------------------------------
     elif freq_hz <= 22_600_000_000:
         band = "10_22"
+        outa_mux = 2  # internal doubler
         chdiv = 1
-        outa_mux = 2  # VCO ×2
         vco_hz = freq_hz / 2
 
         if not (VCO_MIN <= vco_hz <= VCO_MAX):
-            raise FrequencyPlanError("VCO out of range (internal doubler)")
+            raise FrequencyPlanError("VCO out of range (×2 mode)")
 
-    # ------------------------------------------------------------
-    # 22.6–40 GHz: internal ×2 + external ×2
-    # ------------------------------------------------------------
     else:
         band = "22_40"
-        chdiv = 1
-        outa_mux = 2  # VCO ×2
+        outa_mux = 2  # internal ×2
         external_doubler = True
+        chdiv = 1
         vco_hz = freq_hz / 4
 
         if not (VCO_MIN <= vco_hz <= VCO_MAX):
-            raise FrequencyPlanError("VCO out of range (external doubler path)")
+            raise FrequencyPlanError("VCO out of range (×4 mode)")
 
-    # ----------------------------
-    # VCO + divider selection
-    # ----------------------------
-
-    # Try legal CHDIV values until VCO is in range
-    for chdiv in sorted(ALLOWED_CHDIV):
-        vco_hz = freq_hz * chdiv / F_REF_HZ
-
-        if VCO_MIN <= vco_hz <= VCO_MAX:
-            break
-    else:
-        raise RuntimeError("No valid VCO configuration found")
-
-    # ----------------------------
-    # PLL N calculation (integer-N)
-    # ----------------------------
+    # -------------------------------------------------
+    # Integer-N PLL calculation
+    # -------------------------------------------------
 
     if vco_hz % F_REF_HZ != 0:
-        raise RuntimeError("VCO frequency not integer-multiple of reference")
+        raise FrequencyPlanError("VCO not integer multiple of reference")
 
     pll_n = int(vco_hz / F_REF_HZ)
 
     if pll_n < 1:
-        raise RuntimeError("Invalid PLL N value")
+        raise FrequencyPlanError("Invalid PLL N")
 
-    # ----------------------------
-    # Power
-    # ----------------------------
+    # -------------------------------------------------
+    # Power (max for now)
+    # -------------------------------------------------
+
     power = 0x7
 
+    # -------------------------------------------------
+    # Debug
+    # -------------------------------------------------
 
-    # ----------------------------
-    # Return plan
-    # ----------------------------
-    print("VCO: ", vco_hz)
-    print("N: ", pll_n)
-    print("chdiv: ", chdiv)
-    print("outa_mux: ", outa_mux)
-    print("power: ", power)
+    print(f"VCO = {vco_hz/1e9:.3f} GHz")
+    print(f"N = {pll_n}")
+    print(f"CHDIV = {chdiv}")
+    print(f"OUTA_MUX = {outa_mux}")
 
     return {
         "N": pll_n,
-        "chdiv": chdiv,
+        "chdiv": chdiv,          # divide ratio, not encoded
         "outa_mux": outa_mux,
         "band": band,
-        "power": power
+        "power": power,
+        "external_doubler": external_doubler,
     }
