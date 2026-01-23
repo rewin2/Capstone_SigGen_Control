@@ -99,4 +99,4 @@ class SignalGeneratorAPI:
     
     def get_last_error(self):
 
-        return self.fsm.last_error()
+        return self.fsm.last_error
