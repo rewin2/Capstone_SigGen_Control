@@ -109,7 +109,30 @@ class LMX2820:
         self._configure_rf_path(plan)
         self._update_registers_from_plan(plan)
         self._write_frequency_sequence()
+        chdiv_code = self.encode_chdiv(plan["chdiv"])
+        self.regs["CHDIV"].value = chdiv_code
+
     
+    def encode_chdiv(self, divide_ratio: int) -> int:
+        """
+        Convert a CHDIV divide ratio (2–128) to LMX2820 encoding.
+        """
+
+        chdiv_map = {
+            2:   0,
+            4:   1,
+            8:   2,
+            16:  3,
+            32:  4,
+            64:  5,
+            128: 6,
+        }
+
+        if divide_ratio not in chdiv_map:
+            raise ValueError(f"Invalid CHDIV divide ratio: {divide_ratio}")
+        
+        return chdiv_map[divide_ratio]
+
     # ------------------------------------------------------------
     # RF Path GPIO Configuration
     # ------------------------------------------------------------
