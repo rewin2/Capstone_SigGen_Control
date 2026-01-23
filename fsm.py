@@ -78,20 +78,19 @@ class RFFSM:
         """
        
         if self.state not in (RFState.STANDBY, RFState.READY):
-            raise RuntimeError(
-                f"Cannot set frequency in state {self.state}"
-            )
+            raise RuntimeError("Invalid state")
 
         try:
             self.state = RFState.CONFIGURING
 
-            plan = self.device.compute_frequency_plan_integer_n(freq_hz)
+            plan = frequency_plan.compute_frequency_plan_integer_n(freq_hz)
             self.device.configure_frequency(plan)
 
-            self.state = RFState.READY
+            self.state = RFState.READY   # ← success path ONLY
 
         except Exception as e:
             self._enter_error_state(str(e))
+            raise
          
     # ============================================================
     # RF Control
