@@ -96,6 +96,12 @@ class LMX2820:
     # Frequency Programming (UNCHANGED BEHAVIOR)
     # ------------------------------------------------------------
 
+    def configure_frequency(self, plan: dict):
+        """
+        Public entry point used by FSM.
+        """
+        self.apply_frequency_plan(plan)
+
     def apply_frequency_plan(self, plan: dict):
         """
         Update register image from frequency plan and program PLL.
