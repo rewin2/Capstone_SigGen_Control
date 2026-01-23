@@ -95,13 +95,14 @@ def main():
             f"{type(e).__name__}: {e}"
             if str(e)
             else f"{type(e).__name__} (no message)")
+        
         print("=== EXCEPTION ===")
         print(e)
         print("=== FSM ERROR ===")
         print(api.get_last_error())
         sys.exit(1)
 
-    traceback.print_exc()   # <-- THIS IS CRITICAL
+        traceback.print_exc()
 
 
 if __name__ == "__main__":
