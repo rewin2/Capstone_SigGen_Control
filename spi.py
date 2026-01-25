@@ -40,7 +40,12 @@ class MockSPI(SPIDriverBase):
         entry = (reg, value)
         self.log.append(entry)
 
-        print(f"[SPI MOCK] WRITE  R{reg:03d} = 0x{value:06X}")
+        if isinstance(reg, int):
+            reg_str = f"R{reg:03d}"
+        else:
+            reg_str = reg
+
+        print(f"[SPI MOCK] WRITE  {reg_str} = 0x{value:06X}")
 
     def clear_log(self):
         self.log.clear()
