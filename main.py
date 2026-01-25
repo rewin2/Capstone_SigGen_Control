@@ -34,6 +34,46 @@ def build_system() -> SignalGeneratorAPI:
     api = SignalGeneratorAPI(fsm)
     return api
 
+def interactive_loop(api):
+    print("\nRF Signal Generator Ready")
+    print("Enter frequency in Hz or GHz (e.g. 1e9, 10e9)")
+    print("Commands: enable, disable, state, reset, quit\n")
+
+    while True:
+        try:
+            cmd = input(">> ").strip().lower()
+
+            if cmd in ("quit", "exit"):
+                print("Exiting.")
+                break
+
+            elif cmd == "state":
+                print("State:", api.get_state())
+                continue
+
+            elif cmd == "enable":
+                api.rf_enable()
+                print("RF ENABLED")
+                continue
+
+            elif cmd == "disable":
+                api.rf_disable()
+                print("RF DISABLED")
+                continue
+
+            elif cmd == "reset":
+                api.reset()
+                print("System reset")
+                continue
+
+            else:
+                # Treat input as frequency
+                freq = float(cmd)
+                api.set_frequency(int(freq))
+                print(f"Frequency set to {int(freq)} Hz")
+
+        except Exception as e:
+            print("ERROR:", e)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -88,7 +128,7 @@ def main():
             api.rf_disable()
             print("RF output disabled")
 
-        print(f"System state: {api.get_state().name}")
+        #print(f"System state: {api.get_state().name}")
 
     except Exception as e:
         error_msg = (
@@ -103,6 +143,7 @@ def main():
         sys.exit(1)
 
         traceback.print_exc()
+    interactive_loop(api)
 
 if __name__ == "__main__":
     main()
