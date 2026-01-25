@@ -103,14 +103,21 @@ class LMX2820:
         self.apply_frequency_plan(plan)
 
     def apply_frequency_plan(self, plan: dict):
-        """
-        Update register image from frequency plan and program PLL.
-        """
+        # --- configure RF path ---
         self._configure_rf_path(plan)
-        self._update_registers_from_plan(plan)
-        self._write_frequency_sequence()
+
+        # --- encode CHDIV and write ---
         chdiv_code = self.encode_chdiv(plan["chdiv"])
-        self.regs["CHDIV"].value = chdiv_code
+        self.write_register("CHDIV", chdiv_code)
+
+        # --- write other registers ---
+        self.write_register("OUTA_MUX", plan["outa_mux"])
+        self.write_register("PLL_N_LSB", plan["N"] & 0xFFFF)
+        self.write_register("PLL_N_MSB", (plan["N"] >> 16) & 0xFF)
+
+        # --- commit PLL sequence in correct order ---
+        self._write_frequency_sequence()
+
 
     
     def encode_chdiv(self, divide_ratio: int) -> int:
