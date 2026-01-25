@@ -88,7 +88,7 @@ class RFFSM:
             self.device.configure_frequency(plan)
 
             self.state = RFState.READY   # ← success path ONLY
-
+        
         except Exception as e:
             self._enter_error_state(str(e))
             raise
