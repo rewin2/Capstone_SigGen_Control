@@ -14,6 +14,7 @@ from write_order import (
 )
 
 from frequency_plan import compute_frequency_plan_integer_n
+from spi import MockSPI
 from utils import load_register_image_from_text
 from utils import encode_chdiv
 
@@ -103,20 +104,42 @@ class LMX2820:
         self.apply_frequency_plan(plan)
 
     def apply_frequency_plan(self, plan: dict):
-        # --- configure RF path ---
+        """
+        Apply a frequency plan produced by compute_frequency_plan_integer_n().
+
+        plan contains physical values only:
+        - N           : integer PLL N
+        - chdiv       : divide ratio (2–128)
+        - outa_mux    : 0=divider, 1=direct, 2=doubler
+        - band        : string
+        - power       : output power
+        - external_doubler : bool (optional)
+        """
+
+        self.rf_enable(False)
+
         self._configure_rf_path(plan)
 
-        # --- encode CHDIV and write ---
-        chdiv_code = self.encode_chdiv(plan["chdiv"])
-        self.write_register("CHDIV", chdiv_code)
+        chdiv_ratio = plan["chdiv"]            # e.g. 8
+        chdiv_code = self.encode_chdiv(chdiv_ratio)
 
-        # --- write other registers ---
-        self.write_register("OUTA_MUX", plan["outa_mux"])
-        self.write_register("PLL_N_LSB", plan["N"] & 0xFFFF)
-        self.write_register("PLL_N_MSB", (plan["N"] >> 16) & 0xFF)
+        self.spi.write("CHDIV", chdiv_code)
 
-        # --- commit PLL sequence in correct order ---
+        outa_mux = plan["outa_mux"]
+        self.spi.write("OUTA_MUX", outa_mux)
+
+        pll_n = plan["N"]
+
+        pll_n_lsb = pll_n & 0xFFFF
+        pll_n_msb = (pll_n >> 16) & 0xFF
+
+        self.spi.write("PLL_N_LSB", pll_n_lsb)
+        self.spi.write("PLL_N_MSB", pll_n_msb)
+
+        self.spi.write("OUTA_PWR", plan["power"])
+
         self._write_frequency_sequence()
+
 
 
     
