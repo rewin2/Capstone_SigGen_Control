@@ -69,7 +69,7 @@ def compute_frequency_plan_integer_n(freq_hz: int) -> dict:
     elif freq_hz <= 11_300_000_000:
         band = "10_22"
         outa_mux = 1  # direct
-        chdiv = 1
+        chdiv = 2
         vco_hz = freq_hz
 
         if not (VCO_MIN <= vco_hz <= VCO_MAX):
@@ -78,7 +78,7 @@ def compute_frequency_plan_integer_n(freq_hz: int) -> dict:
     elif freq_hz <= 22_600_000_000:
         band = "10_22"
         outa_mux = 2  # internal doubler
-        chdiv = 1
+        chdiv = 2
         vco_hz = freq_hz / 2
 
         if not (VCO_MIN <= vco_hz <= VCO_MAX):
@@ -88,7 +88,7 @@ def compute_frequency_plan_integer_n(freq_hz: int) -> dict:
         band = "22_40"
         outa_mux = 2  # internal ×2
         external_doubler = True
-        chdiv = 1
+        chdiv = 2
         vco_hz = freq_hz / 4
 
         if not (VCO_MIN <= vco_hz <= VCO_MAX):
