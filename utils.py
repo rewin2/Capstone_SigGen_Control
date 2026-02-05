@@ -13,7 +13,7 @@
 # - Know about PLL math
 
 
-def load_register_image_from_text(path, num_registers=123):
+def load_register_file(path, num_registers=123):
     """
     Load a register image from a text file.
 
