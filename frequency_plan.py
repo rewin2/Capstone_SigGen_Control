@@ -29,6 +29,8 @@ VCO_MAX = 11_300_000_000
 # Allowed channel divider values
 ALLOWED_CHDIV = {1, 2, 4, 8, 16}
 
+class FrequencyPlanError(Exception):
+    pass
 
 # ------------------------------------------------------------
 # Frequency Planner
@@ -57,6 +59,7 @@ def compute_frequency_plan_integer_n(freq_hz: int) -> dict:
         band = "1_10"
         outa_mux = 0  # divider path
         possible_dividers = [2, 4, 8, 16, 32, 64, 128]
+        external_doubler = None
 
         for div in possible_dividers:
             vco_hz = freq_hz * div
@@ -69,7 +72,8 @@ def compute_frequency_plan_integer_n(freq_hz: int) -> dict:
     elif freq_hz <= 11_300_000_000:
         band = "10_22"
         outa_mux = 1  # direct
-        chdiv = 2
+        chdiv = None
+        external_doubler = None
         vco_hz = freq_hz
 
         if not (VCO_MIN <= vco_hz <= VCO_MAX):
@@ -78,7 +82,8 @@ def compute_frequency_plan_integer_n(freq_hz: int) -> dict:
     elif freq_hz <= 22_600_000_000:
         band = "10_22"
         outa_mux = 2  # internal doubler
-        chdiv = 2
+        chdiv = None
+        external_doubler = None
         vco_hz = freq_hz / 2
 
         if not (VCO_MIN <= vco_hz <= VCO_MAX):
@@ -88,7 +93,7 @@ def compute_frequency_plan_integer_n(freq_hz: int) -> dict:
         band = "22_40"
         outa_mux = 2  # internal ×2
         external_doubler = True
-        chdiv = 2
+        chdiv = None
         vco_hz = freq_hz / 4
 
         if not (VCO_MIN <= vco_hz <= VCO_MAX):
