@@ -53,6 +53,9 @@ REF_DIV_REG       = 11   # R11
 PLL_N_LSB_REG     = 36   # R36  N[15:0]
 PLL_N_MSB_REG     = 37   # R37  N[18:16]
 
+PLL_N_LSB_MASK    = 0x0007
+PLL_N_LSB_SHIFT   = 0
+
 PLL_N_MSB_MASK    = 0x0007
 PLL_N_MSB_SHIFT   = 0
 
