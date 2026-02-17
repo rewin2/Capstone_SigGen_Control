@@ -1,22 +1,13 @@
 # lmx2820.py
 #
-# LMX2820 device driver
+# LMX2820 device driver (Fractional-N version)
 #
 
 import time
 
-from frequency_plan import compute_frequency_plan_integer_n
 from register_map import *
-from spi import MockSPI
-from utils import load_register_file
-from utils import encode_chdiv
 from init_register_values import INIT_REG_VALUES
-from write_order import (
-    STATIC_REGS,
-    FREQ_REGS,
-    CAL_REGS,
-    OUTPUT_REGS,
-)
+from write_order import STATIC_REGS, CAL_REGS
 
 
 class PLLLockError(RuntimeError):
@@ -24,11 +15,14 @@ class PLLLockError(RuntimeError):
 
 
 class LMX2820:
-    def __init__(self, spi, gpio, register_file: str | None = None):
+    def __init__(self, spi, gpio):
         self.spi = spi
         self.gpio = gpio
-        self.register_file ="data/HexRegisterValuesInitialState.txt"
         self.reg_shadow = {}
+
+    # -------------------------------------------------
+    # Power control
+    # -------------------------------------------------
 
     def power_on(self):
         self.gpio.power_enable(True)
@@ -48,14 +42,10 @@ class LMX2820:
     def initialize_registers(self):
         """
         Write static configuration registers at startup.
-        Uses strict write ordering + explicit values.
         """
-
         for reg in STATIC_REGS:
             if reg not in INIT_REG_VALUES:
-                raise KeyError(
-                    f"No init value defined for register R{reg:03d}"
-                )
+                raise KeyError(f"No init value defined for R{reg:03d}")
 
             value = INIT_REG_VALUES[reg]
             self.write_register(reg, value)
@@ -63,7 +53,7 @@ class LMX2820:
         self.rf_enable(False)
 
     # -------------------------------------------------
-    # RF enable
+    # RF Enable
     # -------------------------------------------------
 
     def rf_enable(self, enable: bool):
@@ -74,9 +64,6 @@ class LMX2820:
     # -------------------------------------------------
 
     def write_register(self, reg: int, value: int):
-        """
-        Full 24-bit register overwrite.
-        """
         if not (0 <= value <= 0xFFFFFF):
             raise ValueError(f"Register value out of range: 0x{value:X}")
 
@@ -84,26 +71,19 @@ class LMX2820:
         self.spi.write(reg, value)
 
     def write_field(self, reg: int, mask: int, shift: int, value: int):
-        """
-        Write a masked bitfield into a register.
-        """
         if value < 0:
             raise ValueError("Field value cannot be negative")
 
         current = self.reg_shadow.get(reg, 0)
         new_value = (current & ~mask) | ((value << shift) & mask)
 
-        self.reg_shadow[reg] = new_value
-        self.spi.write(reg, new_value)
+        self.write_register(reg, new_value)
 
     # -------------------------------------------------
     # CHDIV encoding
     # -------------------------------------------------
 
     def encode_chdiv(self, chdiv: int) -> int:
-        """
-        Encode channel divider ratio into register field value.
-        """
         encoding = {
             2: 0,
             4: 1,
@@ -120,14 +100,10 @@ class LMX2820:
         return encoding[chdiv]
 
     # -------------------------------------------------
-    # GPIO-only output routing
+    # GPIO Output Routing
     # -------------------------------------------------
 
     def configure_output_path(self, outa_mux: int):
-        """
-        Configure external RF routing only.
-        OUTA_MUX register must already be programmed.
-        """
 
         if outa_mux == 0:
             self.gpio.set_sp4t(0)
@@ -145,37 +121,84 @@ class LMX2820:
             raise ValueError(f"Invalid OUTA_MUX value: {outa_mux}")
 
     # -------------------------------------------------
-    # Frequency programming (SINGLE AUTHORITY)
+    # PLL Programming (Fractional-N)
     # -------------------------------------------------
 
-    def apply_frequency_plan(self, plan: dict):
-        """
-        Apply a complete frequency plan.
-        This is the ONLY function allowed to program
-        frequency-related registers.
-        """
+    def program_pll(self, N: int, NUM: int, DEN: int, fractional: bool):
 
-        # 0. RF OFF
-        self.rf_enable(False)
-
-        # 1. PLL N divider
-        n = plan["N"]
-
+        # ---- Integer N ----
         self.write_field(
             PLL_N_LSB_REG,
             PLL_N_LSB_MASK,
             PLL_N_LSB_SHIFT,
-            n & 0xFF,
+            N & 0xFF,
         )
 
         self.write_field(
             PLL_N_MSB_REG,
             PLL_N_MSB_MASK,
             PLL_N_MSB_SHIFT,
-            (n >> 8) & 0xFF,
+            (N >> 8) & 0xFF,
         )
 
-        # 2. CHDIV (ONLY when divider path is used)
+        # ---- Fractional Numerator ----
+        self.write_field(
+            PLL_NUM_LSB_REG,
+            PLL_NUM_LSB_MASK,
+            PLL_NUM_LSB_SHIFT,
+            NUM & 0xFFFF,
+        )
+
+        self.write_field(
+            PLL_NUM_MSB_REG,
+            PLL_NUM_MSB_MASK,
+            PLL_NUM_MSB_SHIFT,
+            (NUM >> 16),
+        )
+
+        # ---- Fractional Denominator ----
+        self.write_field(
+            PLL_DEN_LSB_REG,
+            PLL_DEN_LSB_MASK,
+            PLL_DEN_LSB_SHIFT,
+            DEN & 0xFFFF,
+        )
+
+        self.write_field(
+            PLL_DEN_MSB_REG,
+            PLL_DEN_MSB_MASK,
+            PLL_DEN_MSB_SHIFT,
+            (DEN >> 16),
+        )
+
+        # ---- Fractional Enable ----
+        frac_bit = 1 if fractional else 0
+
+        self.write_field(
+            PLL_FRAC_EN_REG,
+            PLL_FRAC_EN_MASK,
+            PLL_FRAC_EN_SHIFT,
+            frac_bit,
+        )
+
+    # -------------------------------------------------
+    # Frequency Programming (Single Authority)
+    # -------------------------------------------------
+
+    def apply_frequency_plan(self, plan: dict):
+
+        # 0. RF OFF
+        self.rf_enable(False)
+
+        # 1. Program PLL
+        self.program_pll(
+            N=plan["N"],
+            NUM=plan["NUM"],
+            DEN=plan["DEN"],
+            fractional=plan["fractional"],
+        )
+
+        # 2. CHDIV (divider path only)
         if plan["outa_mux"] == 0:
             if plan["chdiv"] is None:
                 raise ValueError("CHDIV required when OUTA_MUX = 0")
@@ -189,7 +212,7 @@ class LMX2820:
                 chdiv_code,
             )
 
-        # 3. OUTA_MUX
+        # 3. OUTA_MUX register
         self.write_field(
             OUTA_MUX_REG,
             OUTA_MUX_MASK,
@@ -200,7 +223,7 @@ class LMX2820:
         # 4. GPIO routing
         self.configure_output_path(plan["outa_mux"])
 
-        # 5. Calibration / update
+        # 5. Calibration writes
         for reg in CAL_REGS:
             self.spi.write(reg, self.reg_shadow.get(reg, 0))
 

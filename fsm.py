@@ -84,7 +84,7 @@ class RFFSM:
         try:
             self.state = RFState.CONFIGURING
 
-            plan = frequency_plan.compute_frequency_plan_integer_n(freq_hz)
+            plan = frequency_plan.compute_frequency_plan_fractional(freq_hz)
             self.device.apply_frequency_plan(plan)
 
             self.state = RFState.READY   # ← success path ONLY

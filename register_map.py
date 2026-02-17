@@ -51,12 +51,11 @@ REF_DIV_REG       = 11   # R11
 # ------------------------------------------------------------
 
 PLL_N_LSB_REG     = 36   # R36  N[15:0]
-PLL_N_MSB_REG     = 37   # R37  N[18:16]
-
-PLL_N_LSB_MASK    = 0x0007
+PLL_N_LSB_MASK    = 0xFFFF
 PLL_N_LSB_SHIFT   = 0
 
-PLL_N_MSB_MASK    = 0x0007
+PLL_N_MSB_REG     = 37   # R37  N[18:16]
+PLL_N_MSB_MASK    = 0x0007    # correct if only 3 bits wide
 PLL_N_MSB_SHIFT   = 0
 
 
@@ -65,21 +64,30 @@ PLL_N_MSB_SHIFT   = 0
 # ------------------------------------------------------------
 
 PLL_NUM_LSB_REG   = 38   # R38  NUM[15:0]
-PLL_NUM_MSB_REG   = 39   # R39  NUM[23:16]
+PLL_NUM_LSB_MASK  = 0xFFFF
+PLL_NUM_LSB_SHIFT = 0
 
+PLL_NUM_MSB_REG   = 39   # R39  NUM[23:16]
+PLL_NUM_MSB_MASK  = 0x00FF
+PLL_NUM_MSB_SHIFT = 0
 
 # ------------------------------------------------------------
 # Fractional Denominator DEN (24 bits)
 # ------------------------------------------------------------
 
 PLL_DEN_LSB_REG   = 40   # R40  DEN[15:0]
-PLL_DEN_MSB_REG   = 41   # R41  DEN[23:16]
+PLL_DEN_LSB_MASK  = 0xFFFF
+PLL_DEN_LSB_SHIFT = 0
 
+PLL_DEN_MSB_REG   = 41   # R41  DEN[23:16]
+PLL_DEN_MSB_MASK  = 0x00FF
+PLL_DEN_MSB_SHIFT = 0
 
 # ------------------------------------------------------------
 # Fractional Mode Control
 # ------------------------------------------------------------
 
+PLL_FRAC_EN_REG = 42
 PLL_FRAC_CTRL_REG = 42   # R42
 
 PLL_FRAC_EN_MASK  = 0x0001
