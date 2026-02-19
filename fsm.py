@@ -89,6 +89,9 @@ class RFFSM:
 
             self.state = RFState.READY   # ← success path ONLY
         
+        except PLLLockError as e:
+            self._enter_error_state(f"PLL lock failure: {e}")
+            raise
         except Exception as e:
             self._enter_error_state(str(e))
             raise

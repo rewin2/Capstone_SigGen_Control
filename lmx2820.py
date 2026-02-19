@@ -227,5 +227,16 @@ class LMX2820:
         for reg in CAL_REGS:
             self.spi.write(reg, self.reg_shadow.get(reg, 0))
 
-        # 6. RF ON
+        # 6. Wait for lock
+        LOCK_TIMEOUT_S = 0.1
+        LOCK_POLL_INTERVAL_S = 0.001
+        elapsed = 0.0
+
+        while not self.gpio.read_lock_detect():
+            if elapsed >= LOCK_TIMEOUT_S:
+                raise PLLLockError("PLL failed to lock within timeout")
+            time.sleep(LOCK_POLL_INTERVAL_S)
+            elapsed += LOCK_POLL_INTERVAL_S
+
+        # 7. RF ON
         self.rf_enable(True)
