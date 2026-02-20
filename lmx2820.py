@@ -64,7 +64,7 @@ class LMX2820:
     # -------------------------------------------------
 
     def write_register(self, reg: int, value: int):
-        if not (0 <= value <= 0xFFFFFF):
+        if not (0 <= value <= 0xFFFF):
             raise ValueError(f"Register value out of range: 0x{value:X}")
 
         self.reg_shadow[reg] = value
@@ -126,22 +126,22 @@ class LMX2820:
 
     def program_pll(self, N: int, NUM: int, DEN: int, fractional: bool):
 
-        # ---- Integer N ----
+        # ---- Integer N (15-bit, single register R36) ----
         self.write_field(
-            PLL_N_LSB_REG,
-            PLL_N_LSB_MASK,
-            PLL_N_LSB_SHIFT,
-            N & 0xFF,
+            PLL_N_REG,
+            PLL_N_MASK,
+            PLL_N_SHIFT,
+            N & 0x7FFF,
         )
 
+        # ---- Fractional Numerator (32-bit, R42=MSB, R43=LSB) ----
         self.write_field(
-            PLL_N_MSB_REG,
-            PLL_N_MSB_MASK,
-            PLL_N_MSB_SHIFT,
-            (N >> 8) & 0xFF,
+            PLL_NUM_MSB_REG,
+            PLL_NUM_MSB_MASK,
+            PLL_NUM_MSB_SHIFT,
+            (NUM >> 16) & 0xFFFF,
         )
 
-        # ---- Fractional Numerator ----
         self.write_field(
             PLL_NUM_LSB_REG,
             PLL_NUM_LSB_MASK,
@@ -149,14 +149,14 @@ class LMX2820:
             NUM & 0xFFFF,
         )
 
+        # ---- Fractional Denominator (32-bit, R38=MSB, R39=LSB) ----
         self.write_field(
-            PLL_NUM_MSB_REG,
-            PLL_NUM_MSB_MASK,
-            PLL_NUM_MSB_SHIFT,
-            (NUM >> 16),
+            PLL_DEN_MSB_REG,
+            PLL_DEN_MSB_MASK,
+            PLL_DEN_MSB_SHIFT,
+            (DEN >> 16) & 0xFFFF,
         )
 
-        # ---- Fractional Denominator ----
         self.write_field(
             PLL_DEN_LSB_REG,
             PLL_DEN_LSB_MASK,
@@ -164,21 +164,12 @@ class LMX2820:
             DEN & 0xFFFF,
         )
 
+        # ---- MASH order (integer=0, fractional=1+) ----
         self.write_field(
-            PLL_DEN_MSB_REG,
-            PLL_DEN_MSB_MASK,
-            PLL_DEN_MSB_SHIFT,
-            (DEN >> 16),
-        )
-
-        # ---- Fractional Enable ----
-        frac_bit = 1 if fractional else 0
-
-        self.write_field(
-            PLL_FRAC_EN_REG,
-            PLL_FRAC_EN_MASK,
-            PLL_FRAC_EN_SHIFT,
-            frac_bit,
+            MASH_CTRL_REG,
+            MASH_ORDER_MASK,
+            MASH_ORDER_SHIFT,
+            MASH_ORDER_1 if fractional else MASH_INTEGER,
         )
 
     # -------------------------------------------------
