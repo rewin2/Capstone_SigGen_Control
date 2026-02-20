@@ -71,8 +71,15 @@ def load_register_file(path, num_registers=123):
                 raise ValueError(
                     f"Invalid hex value on line {line_num}: '{value_str}'"
                 )
-
-            reg_image[reg_num] = value
+            
+            embedded_addr = (value >> 16) & 0xFF
+            if embedded_addr != reg_num:
+                raise ValueError(
+                    f"Address mismatch on line {line_num}: "
+                    f"R{reg_num} has embedded address 0x{embedded_addr:02X}"
+                )
+            
+            reg_image[reg_num] = value & 0xFFFF   # strip address byte, keep data only
 
     return reg_image
 
