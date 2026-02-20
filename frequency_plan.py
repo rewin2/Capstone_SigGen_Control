@@ -60,7 +60,7 @@ def compute_frequency_plan_fractional(freq_hz: float) -> dict:
                 chdiv = div
                 break
         else:
-            raise FrequencyPlanError("No valid divider for 1–10 GHz")
+            raise FrequencyPlanError("No valid divider for 1-10 GHz")
 
     elif freq_hz <= 11_300_000_000:
         band = "10_22"
