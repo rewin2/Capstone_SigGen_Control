@@ -30,13 +30,27 @@ class SPIDriverBase:
 class MockSPI(SPIDriverBase):
     """
     Mock SPI driver for simulation and testing.
+    Behaviorally identical to RealSPI - same validation, same format.
     """
 
     def __init__(self):
         self.log = []
 
-    def write(self, reg, value):
-        value &= 0xFFFFFF  # LMX2820 is 24-bit
+    def write(self, reg: int, value: int):
+        """
+        Simulate a 24-bit LMX2820 SPI write.
+
+        Packet format mirrors RealSPI:
+            Byte 0: 7-bit register address (MSB=0 for write)
+            Byte 1: Data high byte (bits 15:8)
+            Byte 2: Data low byte  (bits 7:0)
+        """
+        if not (0 <= reg <= 0x7F):
+            raise ValueError(f"Register address out of range: {reg}")
+
+        if not (0 <= value <= 0xFFFF):
+            raise ValueError(f"Register value out of range: 0x{value:X}")
+
         entry = (reg, value)
         self.log.append(entry)
 
@@ -45,7 +59,13 @@ class MockSPI(SPIDriverBase):
         else:
             reg_str = reg
 
-        print(f"[SPI MOCK] WRITE  {reg_str} = 0x{value:06X}")
+        print(f"[SPI MOCK] WRITE  {reg_str} = 0x{value:04X}")
+
+    def close(self):
+        """
+        No-op for mock driver. Mirrors RealSPI interface.
+        """
+        pass
 
     def clear_log(self):
         self.log.clear()
