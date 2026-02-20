@@ -7,7 +7,7 @@ import time
 
 from register_map import *
 from init_register_values import INIT_REG_VALUES
-from write_order import STATIC_REGS, CAL_REGS
+from write_order import STATIC_REGS, CAL_REGS, FREQ_REGS
 
 
 class PLLLockError(RuntimeError):
@@ -220,14 +220,20 @@ class LMX2820:
             plan["outa_mux"],
         )
 
-        # 4. GPIO routing
+
+        # 4. Flush to hardware in correct write order  ← goes here
+        for reg in FREQ_REGS:
+            if reg in self.reg_shadow:
+                self.spi.write(reg, self.reg_shadow[reg])
+
+        # 5. GPIO routing
         self.configure_output_path(plan["outa_mux"])
 
-        # 5. Calibration writes
+        # 6. Calibration writes
         for reg in CAL_REGS:
             self.spi.write(reg, self.reg_shadow.get(reg, 0))
 
-        # 6. Wait for lock
+        # 7. Wait for lock
         LOCK_TIMEOUT_S = 0.1
         LOCK_POLL_INTERVAL_S = 0.001
         elapsed = 0.0
@@ -238,5 +244,5 @@ class LMX2820:
             time.sleep(LOCK_POLL_INTERVAL_S)
             elapsed += LOCK_POLL_INTERVAL_S
 
-        # 7. RF ON
+        # 8. RF ON
         self.rf_enable(True)
