@@ -17,6 +17,7 @@
 
 from enum import Enum, auto
 from lmx2820 import PLLLockError
+from frequency_plan import FrequencyPlanError
 import frequency_plan
 
 
@@ -80,6 +81,8 @@ class RFFSM:
        
         if self.state not in (RFState.STANDBY, RFState.READY):
             raise RuntimeError("Invalid state")
+        
+        previous_state = self.state
 
         try:
             self.state = RFState.CONFIGURING
@@ -88,6 +91,12 @@ class RFFSM:
             self.device.apply_frequency_plan(plan)
 
             self.state = RFState.READY   # ← success path ONLY
+
+        
+        except (FrequencyPlanError, ValueError) as e:
+            # bad user input — restore previous state, no reset required
+            self.state = previous_state
+            raise
         
         except PLLLockError as e:
             self._enter_error_state(f"PLL lock failure: {e}")
