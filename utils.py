@@ -109,6 +109,6 @@ def format_register_diff(diffs):
     lines = []
     for reg, old, new in diffs:
         lines.append(
-            f"R{reg:03d}: 0x{old:06X} → 0x{new:06X}"
+            f"R{reg:03d}: 0x{old:04X} → 0x{new:04X}"
         )
     return "\n".join(lines)
