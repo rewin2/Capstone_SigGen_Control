@@ -89,12 +89,11 @@ class RFFSM:
 
             plan = frequency_plan.compute_frequency_plan_integer_n(freq_hz)
             self.device.apply_frequency_plan(plan)
-
-            self.state = RFState.READY   # ← success path ONLY
+            self.current_freq_hz = freq_hz
+            self.state = RFState.READY 
 
         
         except (FrequencyPlanError, ValueError) as e:
-            # bad user input — restore previous state, no reset required
             self.state = previous_state
             raise
         
@@ -114,9 +113,9 @@ class RFFSM:
         """
         Explicitly enable RF output without powering down.
         """
-        if self.state == RFState.READY:
+        if self.state == RFState.STANDBY:
             self.device.rf_enable(True)
-            self.state = RFState.STANDBY
+            self.state = RFState.READY
 
     def rf_disable(self):
         """
