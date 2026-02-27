@@ -103,30 +103,54 @@ class LMX2820:
     # GPIO Output Routing
     # -------------------------------------------------
 
-    def configure_output_path(self, outa_mux: int):
+    def configure_output_path(self, plan: dict):
+        """
+        Configure GPIO routing based on frequency band.
 
-        if outa_mux == 0:
+        Band mapping → SP4T position:
+            "1_10"  → position 0  (divider or direct VCO, no doubler)
+            "10_22" → position 1  (direct VCO or internal doubler)
+            "22_30" → position 2  (internal + external doubler)
+            "30_40" → position 3  (internal + external doubler)
+
+        External doubler is driven by the plan, not inferred from band.
+        """
+        band = plan["band"]
+        external_doubler = plan.get("external_doubler", False)
+
+        if band == "1_10":
             self.gpio.set_sp4t(0)
             self.gpio.external_doubler_enable(False)
 
-        elif outa_mux == 1:
+        elif band == "10_22":
             self.gpio.set_sp4t(1)
             self.gpio.external_doubler_enable(False)
 
-        elif outa_mux == 2:
+        elif band == "22_30":
             self.gpio.set_sp4t(2)
             self.gpio.external_doubler_enable(True)
 
+        elif band == "30_40":
+            self.gpio.set_sp4t(3)
+            self.gpio.external_doubler_enable(True)
+
         else:
-            raise ValueError(f"Invalid OUTA_MUX value: {outa_mux}")
+            raise ValueError(f"Unknown band: '{band}'")
+
+        if external_doubler != (band in ("22_30", "30_40")):
+            raise ValueError(
+                f"external_doubler flag inconsistent with band '{band}'"
+            )
 
     # -------------------------------------------------
     # PLL Programming (Fractional-N)
     # -------------------------------------------------
 
-    def program_pll(self, N: int, NUM: int, DEN: int, fractional: bool):
-
-        # ---- Integer N (15-bit, single register R36) ----
+    def program_pll(self, N: int):
+        """
+        Program integer-N divider only.
+        MASH order is set to 0 (integer mode).
+        """
         self.write_field(
             PLL_N_REG,
             PLL_N_MASK,
@@ -134,43 +158,13 @@ class LMX2820:
             N & 0x7FFF,
         )
 
-        # ---- Fractional Numerator (32-bit, R42=MSB, R43=LSB) ----
-        self.write_field(
-            PLL_NUM_MSB_REG,
-            PLL_NUM_MSB_MASK,
-            PLL_NUM_MSB_SHIFT,
-            (NUM >> 16) & 0xFFFF,
-        )
-
-        self.write_field(
-            PLL_NUM_LSB_REG,
-            PLL_NUM_LSB_MASK,
-            PLL_NUM_LSB_SHIFT,
-            NUM & 0xFFFF,
-        )
-
-        # ---- Fractional Denominator (32-bit, R38=MSB, R39=LSB) ----
-        self.write_field(
-            PLL_DEN_MSB_REG,
-            PLL_DEN_MSB_MASK,
-            PLL_DEN_MSB_SHIFT,
-            (DEN >> 16) & 0xFFFF,
-        )
-
-        self.write_field(
-            PLL_DEN_LSB_REG,
-            PLL_DEN_LSB_MASK,
-            PLL_DEN_LSB_SHIFT,
-            DEN & 0xFFFF,
-        )
-
-        # ---- MASH order (integer=0, fractional=1+) ----
         self.write_field(
             MASH_CTRL_REG,
             MASH_ORDER_MASK,
             MASH_ORDER_SHIFT,
-            MASH_ORDER_1 if fractional else MASH_INTEGER,
+            MASH_INTEGER,
         )
+
 
     # -------------------------------------------------
     # Frequency Programming (Single Authority)
@@ -181,15 +175,14 @@ class LMX2820:
         # 0. RF OFF
         self.rf_enable(False)
 
-        # 1. Program PLL
-        self.program_pll(
-            N=plan["N"],
-            NUM=plan["NUM"],
-            DEN=plan["DEN"],
-            fractional=plan["fractional"],
-        )
+        # 1. GPIO routing first — switch must be in correct position
+        #    before RF is enabled
+        self.configure_output_path(plan)
 
-        # 2. CHDIV (divider path only)
+        # 2. Program PLL N
+        self.program_pll(N=plan["N"])
+
+        # 3. CHDIV (divider path only)
         if plan["outa_mux"] == 0:
             if plan["chdiv"] is None:
                 raise ValueError("CHDIV required when OUTA_MUX = 0")
@@ -203,7 +196,7 @@ class LMX2820:
                 chdiv_code,
             )
 
-        # 3. OUTA_MUX register
+        # 4. OUTA_MUX
         self.write_field(
             OUTA_MUX_REG,
             OUTA_MUX_MASK,
@@ -211,23 +204,14 @@ class LMX2820:
             plan["outa_mux"],
         )
 
-
-        # 4. Flush to hardware in correct write order  ← goes here
-        for reg in FREQ_REGS:
-            if reg in self.reg_shadow:
-                self.spi.write(reg, self.reg_shadow[reg])
-
-        # 5. GPIO routing
-        self.configure_output_path(plan["outa_mux"])
-
-        # 6. Calibration writes
+        # 5. Trigger VCO calibration
         for reg in CAL_REGS:
             self.spi.write(reg, self.reg_shadow.get(reg, 0))
 
-        # 7. Wait for lock
-        LOCK_TIMEOUT_S = 0.1
+        # 6. Wait for lock
+        LOCK_TIMEOUT_S       = 0.1
         LOCK_POLL_INTERVAL_S = 0.001
-        elapsed = 0.0
+        elapsed              = 0.0
 
         while not self.gpio.read_lock_detect():
             if elapsed >= LOCK_TIMEOUT_S:
@@ -235,5 +219,5 @@ class LMX2820:
             time.sleep(LOCK_POLL_INTERVAL_S)
             elapsed += LOCK_POLL_INTERVAL_S
 
-        # 8. RF ON
+        # 7. RF ON
         self.rf_enable(True)
