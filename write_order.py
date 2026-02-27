@@ -15,14 +15,13 @@ from register_map import *
 # ============================================================
 
 STATIC_REGS = [
-    SYS_CTRL_REG,
-    SYS_PWR_REG,
-    SYS_RESET_REG,
-    REF_CTRL_REG,
-    REF_DIV_REG,
-    VCO_BIAS_REG,
-    VCO_GAIN_REG,
-    # Add other always-static registers here
+    VCO_GAIN_REG,    # R51
+    VCO_BIAS_REG,    # R50
+    REF_DIV_REG,     # R11
+    REF_CTRL_REG,    # R10
+    SYS_RESET_REG,   # R2
+    SYS_PWR_REG,     # R1
+    SYS_CTRL_REG,    # R0  ← always last
 ]
 
 
