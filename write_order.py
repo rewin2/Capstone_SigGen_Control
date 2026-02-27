@@ -21,7 +21,7 @@ STATIC_REGS = [
     REF_CTRL_REG,    # R10
     SYS_RESET_REG,   # R2
     SYS_PWR_REG,     # R1
-    SYS_CTRL_REG,    # R0  ← always last
+    SYS_CTRL_REG,    # R0
 ]
 
 
@@ -32,27 +32,10 @@ STATIC_REGS = [
 
 
 FREQ_REGS = [
-
-    # --------------------------------------------------------
-    # MASH order control (integer mode = 0)
-    # Must be written before N
-    # --------------------------------------------------------
-    MASH_CTRL_REG,      # R35
-
-    # --------------------------------------------------------
-    # Integer Divider N (single 15-bit register)
-    # --------------------------------------------------------
-    PLL_N_REG,          # R36
-
-    # --------------------------------------------------------
-    # Channel Divider
-    # --------------------------------------------------------
-    CHDIV_REG,          # R32
-
-    # --------------------------------------------------------
-    # Output mux selection
-    # --------------------------------------------------------
-    OUTA_MUX_REG,       # R78
+    OUTA_MUX_REG,    # R78
+    PLL_N_REG,       # R36
+    MASH_CTRL_REG,   # R35
+    CHDIV_REG,       # R32
 ]
 
 
