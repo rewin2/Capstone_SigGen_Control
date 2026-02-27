@@ -127,6 +127,8 @@ def main():
         if args.disable:
             api.rf_disable()
             print("RF output disabled")
+               
+        interactive_loop(api)
 
         #print(f"System state: {api.get_state().name}")
 
@@ -140,10 +142,9 @@ def main():
         print(e)
         print("=== FSM ERROR ===")
         print(api.get_last_error())
+        traceback.print_exc()
         sys.exit(1)
 
-        traceback.print_exc()
-    interactive_loop(api)
 
 if __name__ == "__main__":
     main()
