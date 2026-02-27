@@ -1,22 +1,13 @@
 # lmx2820.py
 #
-# LMX2820 device driver
+# LMX2820 device driver (Fractional-N version)
 #
 
 import time
 
 from register_map import *
-from write_order import (
-    STATIC_REGS,
-    FREQ_REGS,
-    CAL_REGS,
-    OUTPUT_REGS,
-)
-
-from frequency_plan import compute_frequency_plan_integer_n
-from spi import MockSPI
-from utils import load_register_image_from_text
-from utils import encode_chdiv
+from init_register_values import INIT_REG_VALUES
+from write_order import STATIC_REGS, CAL_REGS, FREQ_REGS
 
 
 class PLLLockError(RuntimeError):
@@ -27,15 +18,11 @@ class LMX2820:
     def __init__(self, spi, gpio):
         self.spi = spi
         self.gpio = gpio
+        self.reg_shadow = {}
 
-        # Shadow register image (R0–R122)
-        self.reg_image = [0] * 123
-
-        self.current_plan = None
-
-    # ------------------------------------------------------------
-    # Power / Reset
-    # ------------------------------------------------------------
+    # -------------------------------------------------
+    # Power control
+    # -------------------------------------------------
 
     def power_on(self):
         self.gpio.power_enable(True)
@@ -48,191 +35,94 @@ class LMX2820:
     def reset(self):
         self.power_off()
 
-    # ------------------------------------------------------------
+    # -------------------------------------------------
     # Initialization
-    # ------------------------------------------------------------
+    # -------------------------------------------------
 
     def initialize_registers(self):
         """
-        Load TI default register image and write static configuration.
-        """
-        self.reg_image = load_register_image_from_text(
-            "data/HexRegisterValuesInitialState.txt",
-            num_registers=123,
-        )
-
-        self._write_static_registers()
-
-    def _write_static_registers(self):
-        """
-        Write static configuration registers only.
+        Write static configuration registers at startup.
         """
         for reg in STATIC_REGS:
-            self.spi.write(reg, self.reg_image[reg])
+            if reg not in INIT_REG_VALUES:
+                raise KeyError(f"No init value defined for R{reg:03d}")
 
-    # ------------------------------------------------------------
-    # RF Output Control
-    # ------------------------------------------------------------
+            value = INIT_REG_VALUES[reg]
+            self.write_register(reg, value)
 
-    def rf_enable(self, enable: bool):
-        self.reg_image[RFOUTA_EN_REG] = set_field(
-            self.reg_image[RFOUTA_EN_REG],
-            RFOUTA_EN_MASK,
-            RFOUTA_EN_SHIFT,
-            1 if enable else 0,
-        )
-        self.spi.write(RFOUTA_EN_REG, self.reg_image[RFOUTA_EN_REG])
-        self.gpio.rf_enable(enable)
+        
+        time.sleep(0.010)   
 
-    # ------------------------------------------------------------
-    # Frequency Planning
-    # ------------------------------------------------------------
-
-    def compute_frequency_plan(self, freq_hz: int):
-        plan = compute_frequency_plan_integer_n(freq_hz)
-        self.current_plan = plan
-        return plan
-
-    # ------------------------------------------------------------
-    # Frequency Programming (UNCHANGED BEHAVIOR)
-    # ------------------------------------------------------------
-
-    def configure_frequency(self, plan: dict):
-        """
-        Public entry point used by FSM.
-        """
-        self.apply_frequency_plan(plan)
-
-    def apply_frequency_plan(self, plan: dict):
-        """
-        Apply a frequency plan produced by compute_frequency_plan_integer_n().
-
-        plan contains physical values only:
-        - N           : integer PLL N
-        - chdiv       : divide ratio (2–128)
-        - outa_mux    : 0=divider, 1=direct, 2=doubler
-        - band        : string
-        - power       : output power
-        - external_doubler : bool (optional)
-        """
+        r0_cal = INIT_REG_VALUES[SYS_CTRL_REG] | FCAL_EN_MASK
+        self.write_register(SYS_CTRL_REG, r0_cal)
 
         self.rf_enable(False)
 
-        self._configure_rf_path(plan)
+    # -------------------------------------------------
+    # RF Enable
+    # -------------------------------------------------
 
-        chdiv_ratio = plan["chdiv"]            # e.g. 8
-        chdiv_code = self.encode_chdiv(chdiv_ratio)
+    def rf_enable(self, enable: bool):
+        self.gpio.rf_enable(enable)
 
-        self.spi.write("CHDIV", chdiv_code)
+    # -------------------------------------------------
+    # Low-level register writes
+    # -------------------------------------------------
 
-        outa_mux = plan["outa_mux"]
-        self.spi.write("OUTA_MUX", outa_mux)
+    def write_register(self, reg: int, value: int):
+        if not (0 <= value <= 0xFFFF):
+            raise ValueError(f"Register value out of range: 0x{value:X}")
 
-        pll_n = plan["N"]
+        self.reg_shadow[reg] = value
+        self.spi.write(reg, value)
 
-        pll_n_lsb = pll_n & 0xFFFF
-        pll_n_msb = (pll_n >> 16) & 0xFF
+    def write_field(self, reg: int, mask: int, shift: int, value: int):
+        if value < 0:
+            raise ValueError("Field value cannot be negative")
 
-        self.spi.write("PLL_N_LSB", pll_n_lsb)
-        self.spi.write("PLL_N_MSB", pll_n_msb)
+        current = self.reg_shadow.get(reg, 0)
+        new_value = (current & ~mask) | ((value << shift) & mask)
 
-        self.spi.write("OUTA_PWR", plan["power"])
+        self.write_register(reg, new_value)
 
-        self._write_frequency_sequence()
+    # -------------------------------------------------
+    # CHDIV encoding
+    # -------------------------------------------------
 
-
-
-    
-    def encode_chdiv(self, divide_ratio: int) -> int:
-        """
-        Convert a CHDIV divide ratio (2–128) to LMX2820 encoding.
-        """
-
-        chdiv_map = {
-            2:   0,
-            4:   1,
-            8:   2,
-            16:  3,
-            32:  4,
-            64:  5,
+    def encode_chdiv(self, chdiv: int) -> int:
+        encoding = {
+            2: 0,
+            4: 1,
+            8: 2,
+            16: 3,
+            32: 4,
+            64: 5,
             128: 6,
         }
 
-        if divide_ratio not in chdiv_map:
-            raise ValueError(f"Invalid CHDIV divide ratio: {divide_ratio}")
-        
-        return chdiv_map[divide_ratio]
+        if chdiv not in encoding:
+            raise ValueError(f"Invalid CHDIV value: {chdiv}")
 
-    # ------------------------------------------------------------
-    # RF Path GPIO Configuration
-    # ------------------------------------------------------------
+        return encoding[chdiv]
 
-    def configure_output_path(self, outa_mux: int, chdiv: int | None):  
+    # -------------------------------------------------
+    # GPIO Output Routing
+    # -------------------------------------------------
+
+    def configure_output_path(self, plan: dict):
         """
-        Configure RFOUTA signal path safely.
+        Configure GPIO routing based on frequency band.
 
-        outa_mux:
-            0 = divider
-            1 = direct VCO
-            2 = VCO x2
+        Band mapping → SP4T position:
+            "1_10"  → position 0  (divider or direct VCO, no doubler)
+            "10_22" → position 1  (direct VCO or internal doubler)
+            "22_30" → position 2  (internal + external doubler)
+            "30_40" → position 3  (internal + external doubler)
 
-        chdiv:
-            divide ratio (2,4,8,...128) or None
+        External doubler is driven by the plan, not inferred from band.
         """
-
-        # ------------------------------
-        # Enforce OUTA_MUX validity
-        # ------------------------------
-        if outa_mux not in (0, 1, 2):
-            raise ValueError("Invalid OUTA_MUX value")
-
-        # ------------------------------
-        # Divider path
-        # ------------------------------
-        if outa_mux == 0:
-            if chdiv is None:
-                raise ValueError("CHDIV required when OUTA_MUX = 0")
-
-            chdiv_field = encode_chdiv(chdiv)
-
-            self.write_field(
-                CHDIV_REG,
-                CHDIV_MASK,
-                CHDIV_SHIFT,
-                chdiv_field,
-            )
-
-        # ------------------------------
-        # Direct or VCO x2 path
-        # ------------------------------
-        else:
-            if chdiv not in (None, 1):
-                raise ValueError(
-                    "CHDIV must be bypassed when OUTA_MUX != 0"
-                )
-
-            # Optional but recommended:
-            # force CHDIV field to safe value (e.g. 0)
-            self.write_field(
-                CHDIV_REG,
-                CHDIV_MASK,
-                CHDIV_SHIFT,
-                0,
-            )
-
-        # ------------------------------
-        # Program OUTA_MUX last
-        # ------------------------------
-        self.write_field(
-            OUTA_MUX_REG,
-            OUTA_MUX_MASK,
-            OUTA_MUX_SHIFT,
-            outa_mux,
-        )
-
-
-    def _configure_rf_path(self, plan):
         band = plan["band"]
+        external_doubler = plan.get("external_doubler", False)
 
         if band == "1_10":
             self.gpio.set_sp4t(0)
@@ -242,132 +132,107 @@ class LMX2820:
             self.gpio.set_sp4t(1)
             self.gpio.external_doubler_enable(False)
 
-        elif band == "22_32":
+        elif band == "22_30":
             self.gpio.set_sp4t(2)
             self.gpio.external_doubler_enable(True)
 
-        elif band == "32_40":
+        elif band == "30_40":
             self.gpio.set_sp4t(3)
             self.gpio.external_doubler_enable(True)
 
         else:
-            raise ValueError(f"Unknown band: {band}")
+            raise ValueError(f"Unknown band: '{band}'")
 
-    # ------------------------------------------------------------
-    # Register Updates (PURE DATA)
-    # ------------------------------------------------------------
+        if external_doubler != (band in ("22_30", "30_40")):
+            raise ValueError(
+                f"external_doubler flag inconsistent with band '{band}'"
+            )
 
-    def _update_registers_from_plan(self, plan):
+    # -------------------------------------------------
+    # PLL Programming (Fractional-N)
+    # -------------------------------------------------
+
+    def program_pll(self, N: int):
         """
-        Update PLL-related registers from frequency plan.
-        Correctly handles split PLL registers (N, NUM, DEN).
-        Integer-N mode only.
+        Program integer-N divider only.
+        MASH order is set to 0 (integer mode).
         """
-
-        # ------------------------------------------------------------
-        # Integer Divider N (19 bits)
-        # ------------------------------------------------------------
-        N = plan["N"]
-
-        self.reg_image[PLL_N_LSB_REG] = N & 0xFFFF
-        self.reg_image[PLL_N_MSB_REG] = (
-            self.reg_image[PLL_N_MSB_REG] & ~0x7
-        ) | ((N >> 16) & 0x7)
-
-        # ------------------------------------------------------------
-        # Fractional Numerator (NUM = 0 for integer-N)
-        # ------------------------------------------------------------
-        self.reg_image[PLL_NUM_LSB_REG] = 0x0000
-        self.reg_image[PLL_NUM_MSB_REG] = 0x0000
-
-        # ------------------------------------------------------------
-        # Fractional Denominator (DEN = 1 for integer-N)
-        # ------------------------------------------------------------
-        self.reg_image[PLL_DEN_LSB_REG] = 0x0001
-        self.reg_image[PLL_DEN_MSB_REG] = 0x0000
-
-        # ------------------------------------------------------------
-        # Explicitly disable fractional mode
-        # ------------------------------------------------------------
-        self.reg_image[PLL_FRAC_CTRL_REG] = set_field(
-            self.reg_image[PLL_FRAC_CTRL_REG],
-            PLL_FRAC_EN_MASK,
-            PLL_FRAC_EN_SHIFT,
-            0,
+        self.write_field(
+            PLL_N_REG,
+            PLL_N_MASK,
+            PLL_N_SHIFT,
+            N & 0x7FFF,
         )
 
-        # ------------------------------------------------------------
-        # Channel Divider
-        # ------------------------------------------------------------
-        self.reg_image[CHDIV_REG] = set_field(
-            self.reg_image[CHDIV_REG],
-            CHDIV_MASK,
-            CHDIV_SHIFT,
-            plan["chdiv"],
+        self.write_field(
+            MASH_CTRL_REG,
+            MASH_ORDER_MASK,
+            MASH_ORDER_SHIFT,
+            MASH_INTEGER,
         )
 
-        # ------------------------------------------------------------
-        # Output Mux
-        # ------------------------------------------------------------
-        self.reg_image[OUTA_MUX_REG] = set_field(
-            self.reg_image[OUTA_MUX_REG],
+
+    # -------------------------------------------------
+    # Frequency Programming (Single Authority)
+    # -------------------------------------------------
+
+    def apply_frequency_plan(self, plan: dict):
+
+        # 0. RF OFF
+        self.rf_enable(False)
+
+        # 1. GPIO routing first — switch must be in correct position
+        #    before RF is enabled
+        self.configure_output_path(plan)
+
+        # 2. Program PLL N
+        self.program_pll(N=plan["N"])
+
+        # 3. CHDIV (divider path only)
+        if plan["outa_mux"] == 0:
+            if plan["chdiv"] is None:
+                raise ValueError("CHDIV required when OUTA_MUX = 0")
+
+            chdiv_code = self.encode_chdiv(plan["chdiv"])
+
+            self.write_field(
+                CHDIV_REG,
+                CHDIV_MASK,
+                CHDIV_SHIFT,
+                chdiv_code,
+            )
+
+        # 4. OUTA_MUX
+        self.write_field(
+            OUTA_MUX_REG,
             OUTA_MUX_MASK,
             OUTA_MUX_SHIFT,
             plan["outa_mux"],
         )
 
-        # ------------------------------------------------------------
-        # RF Output Power
-        # ------------------------------------------------------------
-        self.reg_image[RFOUTA_PWR_REG] = set_field(
-            self.reg_image[RFOUTA_PWR_REG],
-            RFOUTA_PWR_MASK,
-            RFOUTA_PWR_SHIFT,
-            plan.get("power", 0x7),
-        )
+        # 5. Trigger VCO calibration
+        for reg in CAL_REGS:
+            self.spi.write(reg, self.reg_shadow.get(reg, 0))
 
-    # ------------------------------------------------------------
-    # Ordered Write + Lock Logic (BEHAVIOR PRESERVED)
-    # ------------------------------------------------------------
+        # 6. Wait for lock
+        LOCK_CONFIRM_COUNT   = 3
+        LOCK_TIMEOUT_S       = 0.1
+        LOCK_POLL_INTERVAL_S = 0.001
 
-    def _write_frequency_sequence(self):
-        MAX_RETRIES = 3
+        elapsed       = 0.0
+        confirm_count = 0
 
-        # Always disable RF during reprogramming
-        self.rf_enable(False)
+        while confirm_count < LOCK_CONFIRM_COUNT:
+            if self.gpio.read_lock_detect():
+                confirm_count += 1
+            else:
+                confirm_count = 0   # reset on any unlock glitch
 
-        # Write frequency-defining registers
-        for reg in FREQ_REGS:
-            self.spi.write(reg, self.reg_image[reg])
+            if elapsed >= LOCK_TIMEOUT_S:
+                raise PLLLockError("PLL failed to lock within timeout")
 
-        time.sleep(0.001)
+            time.sleep(LOCK_POLL_INTERVAL_S)
+            elapsed += LOCK_POLL_INTERVAL_S
 
-        for attempt in range(1, MAX_RETRIES + 1):
-            # Trigger VCO calibration
-            for reg in CAL_REGS:
-                self.spi.write(reg, self.reg_image[reg])
-
-            time.sleep(0.005)
-
-            if self.wait_for_lock(timeout_ms=50):
-                # Enable RF output
-                for reg in OUTPUT_REGS:
-                    self.spi.write(reg, self.reg_image[reg])
-                return
-
-        # If we get here, lock failed
-        self.rf_enable(False)
-        raise PLLLockError("PLL failed to lock after retries")
-
-    # ------------------------------------------------------------
-    # Lock Detect
-    # ------------------------------------------------------------
-
-    def wait_for_lock(self, timeout_ms=100):
-        for _ in range(timeout_ms):
-            if self.is_locked():
-                return True
-        return False
-
-    def is_locked(self):
-        return self.gpio.read_lock_detect()
+        # 7. RF ON
+        self.rf_enable(True)
