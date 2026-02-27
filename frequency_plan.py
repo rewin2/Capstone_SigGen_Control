@@ -20,7 +20,7 @@
 # Constants
 # ------------------------------------------------------------
 
-F_REF_HZ = 50_000_000
+F_REF_HZ = 25_000_000
 STEP_HZ  = 100_000_000
 VCO_MIN  = 5_650_000_000
 VCO_MAX  = 11_300_000_000
@@ -42,7 +42,7 @@ def compute_frequency_plan_integer_n(freq_hz: int) -> dict:
 
     if freq_hz % STEP_HZ != 0:
         raise ValueError("Frequency must be in 100 MHz steps")
-
+  
     external_doubler = False
     chdiv            = None
 
