@@ -89,13 +89,13 @@ class SignalGeneratorAPI:
         """
         Get currently programmed frequency.
         """
-        return self.fsm.current_frequency
+        return self.fsm.current_freq_hz
 
     def is_locked(self) -> bool:
         """
         Query PLL lock status.
         """
-        return self.fsm.is_locked()
+        return self.fsm.is_rf_active()
     
     def get_last_error(self):
 
