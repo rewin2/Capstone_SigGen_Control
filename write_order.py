@@ -15,14 +15,13 @@ from register_map import *
 # ============================================================
 
 STATIC_REGS = [
-    SYS_CTRL_REG,
-    SYS_PWR_REG,
-    SYS_RESET_REG,
-    REF_CTRL_REG,
-    REF_DIV_REG,
-    VCO_BIAS_REG,
-    VCO_GAIN_REG,
-    # Add other always-static registers here
+    VCO_GAIN_REG,    # R51
+    VCO_BIAS_REG,    # R50
+    REF_DIV_REG,     # R11
+    REF_CTRL_REG,    # R10
+    SYS_RESET_REG,   # R2
+    SYS_PWR_REG,     # R1
+    SYS_CTRL_REG,    # R0  ← always last
 ]
 
 
@@ -31,41 +30,29 @@ STATIC_REGS = [
 # Written on EVERY frequency change
 # ============================================================
 
+
 FREQ_REGS = [
 
     # --------------------------------------------------------
-    # Integer Divider N (write LSB → MSB)
+    # MASH order control (integer mode = 0)
+    # Must be written before N
     # --------------------------------------------------------
-    PLL_N_LSB_REG,
-    PLL_N_MSB_REG,
+    MASH_CTRL_REG,      # R35
 
     # --------------------------------------------------------
-    # Fractional Numerator (NUM) (LSB → MSB)
+    # Integer Divider N (single 15-bit register)
     # --------------------------------------------------------
-    PLL_NUM_LSB_REG,
-    PLL_NUM_MSB_REG,
-
-    # --------------------------------------------------------
-    # Fractional Denominator (DEN) (LSB → MSB)
-    # --------------------------------------------------------
-    PLL_DEN_LSB_REG,
-    PLL_DEN_MSB_REG,
-
-    # --------------------------------------------------------
-    # Fractional mode control
-    # Must be written BEFORE calibration
-    # --------------------------------------------------------
-    PLL_FRAC_CTRL_REG,
+    PLL_N_REG,          # R36
 
     # --------------------------------------------------------
     # Channel Divider
     # --------------------------------------------------------
-    CHDIV_REG,
+    CHDIV_REG,          # R32
 
     # --------------------------------------------------------
     # Output mux selection
     # --------------------------------------------------------
-    OUTA_MUX_REG,
+    OUTA_MUX_REG,       # R78
 ]
 
 

@@ -13,7 +13,7 @@
 # - Know about PLL math
 
 
-def load_register_image_from_text(path, num_registers=123):
+def load_register_file(path, num_registers=123):
     """
     Load a register image from a text file.
 
@@ -71,8 +71,15 @@ def load_register_image_from_text(path, num_registers=123):
                 raise ValueError(
                     f"Invalid hex value on line {line_num}: '{value_str}'"
                 )
-
-            reg_image[reg_num] = value
+            
+            embedded_addr = (value >> 16) & 0xFF
+            if embedded_addr != reg_num:
+                raise ValueError(
+                    f"Address mismatch on line {line_num}: "
+                    f"R{reg_num} has embedded address 0x{embedded_addr:02X}"
+                )
+            
+            reg_image[reg_num] = value & 0xFFFF   # strip address byte, keep data only
 
     return reg_image
 
@@ -105,28 +112,3 @@ def format_register_diff(diffs):
             f"R{reg:03d}: 0x{old:06X} → 0x{new:06X}"
         )
     return "\n".join(lines)
-
-def encode_chdiv(divide_ratio: int) -> int:
-        """
-        Encode CHDIV divide ratio for LMX2820.
-
-        Valid divide ratios:
-        2, 4, 8, 16, 32, 64, 128
-
-        Returns CHDIV field value.
-        """
-
-        mapping = {
-            2: 0,
-            4: 1,
-            8: 2,
-            16: 3,
-            32: 4,
-            64: 5,
-            128: 6,
-        }
-
-        if divide_ratio not in mapping:
-            raise ValueError("Invalid CHDIV ratio for LMX2820")
-
-        return mapping[divide_ratio]
