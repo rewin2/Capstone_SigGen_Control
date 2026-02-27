@@ -50,6 +50,12 @@ class LMX2820:
             value = INIT_REG_VALUES[reg]
             self.write_register(reg, value)
 
+        
+        time.sleep(0.010)   
+
+        r0_cal = INIT_REG_VALUES[SYS_CTRL_REG] | FCAL_EN_MASK
+        self.write_register(SYS_CTRL_REG, r0_cal)
+
         self.rf_enable(False)
 
     # -------------------------------------------------
@@ -209,13 +215,22 @@ class LMX2820:
             self.spi.write(reg, self.reg_shadow.get(reg, 0))
 
         # 6. Wait for lock
+        LOCK_CONFIRM_COUNT   = 3
         LOCK_TIMEOUT_S       = 0.1
         LOCK_POLL_INTERVAL_S = 0.001
-        elapsed              = 0.0
 
-        while not self.gpio.read_lock_detect():
+        elapsed       = 0.0
+        confirm_count = 0
+
+        while confirm_count < LOCK_CONFIRM_COUNT:
+            if self.gpio.read_lock_detect():
+                confirm_count += 1
+            else:
+                confirm_count = 0   # reset on any unlock glitch
+
             if elapsed >= LOCK_TIMEOUT_S:
                 raise PLLLockError("PLL failed to lock within timeout")
+
             time.sleep(LOCK_POLL_INTERVAL_S)
             elapsed += LOCK_POLL_INTERVAL_S
 
