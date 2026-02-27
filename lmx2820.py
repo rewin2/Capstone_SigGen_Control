@@ -40,24 +40,23 @@ class LMX2820:
     # -------------------------------------------------
 
     def initialize_registers(self):
-        """
-        Write static configuration registers at startup.
-        """
         for reg in STATIC_REGS:
             if reg not in INIT_REG_VALUES:
                 raise KeyError(f"No init value defined for R{reg:03d}")
 
             value = INIT_REG_VALUES[reg]
+
+            if reg == SYS_CTRL_REG:
+                value = value & ~FCAL_EN_MASK
+
             self.write_register(reg, value)
 
-        
-        time.sleep(0.010)   
+        time.sleep(0.010) 
 
         r0_cal = INIT_REG_VALUES[SYS_CTRL_REG] | FCAL_EN_MASK
         self.write_register(SYS_CTRL_REG, r0_cal)
 
         self.rf_enable(False)
-
     # -------------------------------------------------
     # RF Enable
     # -------------------------------------------------
