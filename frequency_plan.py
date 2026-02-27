@@ -33,6 +33,8 @@ ALLOWED_CHDIV = {1, 2, 4, 8, 16}
 # ------------------------------------------------------------
 # Frequency Planner
 # ------------------------------------------------------------
+class FrequencyPlanError(Exception):
+    pass
 
 def compute_frequency_plan_integer_n(freq_hz: int) -> dict:
     if freq_hz < 1_000_000_000 or freq_hz > 40_000_000_000:
