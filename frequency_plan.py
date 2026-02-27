@@ -28,12 +28,9 @@ VCO_MAX  = 11_300_000_000
 class FrequencyPlanError(Exception):
     pass
 
-
 # ------------------------------------------------------------
 # Frequency Planner (Integer-N)
 # ------------------------------------------------------------
-class FrequencyPlanError(Exception):
-    pass
 
 def compute_frequency_plan_integer_n(freq_hz: int) -> dict:
 
