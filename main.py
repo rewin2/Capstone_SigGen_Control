@@ -4,7 +4,7 @@ import argparse
 import sys
 import traceback
 
-from spi import MockSPI
+from spi import MockSPI, RealSPI
 from lmx2820 import LMX2820
 from fsm import RFFSM, RFState
 from api import SignalGeneratorAPI
