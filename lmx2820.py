@@ -40,21 +40,27 @@ class LMX2820:
     # -------------------------------------------------
 
     def initialize_registers(self):
-        for reg in STATIC_REGS:
-            if reg not in INIT_REG_VALUES:
-                raise KeyError(f"No init value defined for R{reg:03d}")
+        from utils import load_register_file
 
-            value = INIT_REG_VALUES[reg]
+        # Load all 123 registers from TI default file
+        reg_image = load_register_file("data/HexRegisterValuesInitialState.txt")
 
+        # Assert RESET = 1 then deassert
+        self.write_register(SYS_CTRL_REG, reg_image[0] | RESET_MASK)
+        self.write_register(SYS_CTRL_REG, reg_image[0] & ~RESET_MASK & ~FCAL_EN_MASK)
+
+        # Write all registers R122 → R1, R0 last without FCAL_EN
+        for reg in range(122, -1, -1):
+            value = reg_image[reg]
             if reg == SYS_CTRL_REG:
                 value = value & ~FCAL_EN_MASK
-
             self.write_register(reg, value)
 
-        time.sleep(0.010) 
+        # Wait for LDOs
+        time.sleep(0.010)
 
-        r0_cal = INIT_REG_VALUES[SYS_CTRL_REG] | FCAL_EN_MASK
-        self.write_register(SYS_CTRL_REG, r0_cal)
+        # Trigger calibration
+        self.write_register(SYS_CTRL_REG, reg_image[0] | FCAL_EN_MASK)
 
         self.rf_enable(False)
     # -------------------------------------------------
@@ -208,6 +214,8 @@ class LMX2820:
             OUTA_MUX_SHIFT,
             plan["outa_mux"],
         )
+
+        time.sleep(0.010)
 
         # 5. Trigger VCO calibration
         for reg in CAL_REGS:
