@@ -17,6 +17,7 @@
 
 from enum import Enum, auto
 from lmx2820 import PLLLockError
+from frequency_plan import FrequencyPlanError
 import frequency_plan
 
 
@@ -80,14 +81,21 @@ class RFFSM:
        
         if self.state not in (RFState.STANDBY, RFState.READY):
             raise RuntimeError("Invalid state")
+        
+        previous_state = self.state
 
         try:
             self.state = RFState.CONFIGURING
 
             plan = frequency_plan.compute_frequency_plan_integer_n(freq_hz)
             self.device.apply_frequency_plan(plan)
+            self.current_freq_hz = freq_hz
+            self.state = RFState.READY 
 
-            self.state = RFState.READY   # ← success path ONLY
+        
+        except (FrequencyPlanError, ValueError) as e:
+            self.state = previous_state
+            raise
         
         except PLLLockError as e:
             self._enter_error_state(f"PLL lock failure: {e}")
@@ -105,9 +113,9 @@ class RFFSM:
         """
         Explicitly enable RF output without powering down.
         """
-        if self.state == RFState.READY:
+        if self.state == RFState.STANDBY:
             self.device.rf_enable(True)
-            self.state = RFState.STANDBY
+            self.state = RFState.READY
 
     def rf_disable(self):
         """

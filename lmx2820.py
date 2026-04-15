@@ -89,7 +89,6 @@ class LMX2820:
         self.write_register(SYS_CTRL_REG, r0_cal)
 
         self.rf_enable(False)
-
     # -------------------------------------------------
     # RF Enable
     # -------------------------------------------------

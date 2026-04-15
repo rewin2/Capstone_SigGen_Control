@@ -20,10 +20,8 @@
 # Constants
 # ------------------------------------------------------------
 
-F_REF_HZ = 10_000_000   # 10 MHz reference
-STEP_HZ  = 100_000_000  # 100 MHz output step enforcement
-
-# LMX2820 VCO range
+F_REF_HZ = 10_000_000
+STEP_HZ  = 100_000_000
 VCO_MIN  = 5_650_000_000
 VCO_MAX  = 11_300_000_000
 
@@ -34,7 +32,6 @@ VCO_MAX  = 11_300_000_000
 
 class FrequencyPlanError(Exception):
     pass
-
 
 # ------------------------------------------------------------
 # Frequency Planner (Integer-N)
