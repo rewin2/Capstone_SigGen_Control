@@ -3,6 +3,7 @@
 # LMX2820 Register Map (Datasheet-Aligned, Semantic)
 #
 # Source: TI LMX2820 Datasheet (SNAU251A)
+#         MIT Haystack Observatory LMX2820 driver
 #
 # This file defines:
 #   - Register addresses
@@ -44,6 +45,26 @@ POWERDOWN_REG     = 0    # R0
 POWERDOWN_MASK    = 0x0001   # bit 0
 POWERDOWN_SHIFT   = 0
 
+# R0 — FCAL_HPFD_ADJ (bits 10:9)
+# Sets high PFD frequency adjustment for VCO calibration
+# 0 = Fpfd <= 100 MHz
+# 1 = 100 MHz < Fpfd < 150 MHz
+# 2 = 150 MHz < Fpfd <= 200 MHz
+# 3 = Fpfd > 200 MHz
+FCAL_HPFD_ADJ_REG   = 0
+FCAL_HPFD_ADJ_MASK  = 0x0600   # bits 10:9
+FCAL_HPFD_ADJ_SHIFT = 9
+
+# R0 — FCAL_LPFD_ADJ (bits 8:7)
+# Sets low PFD frequency adjustment for VCO calibration
+# 0 = Fpfd >= 10 MHz
+# 1 = 5 MHz <= Fpfd < 10 MHz
+# 2 = 2.5 MHz <= Fpfd < 5 MHz
+# 3 = Fpfd < 2.5 MHz
+FCAL_LPFD_ADJ_REG   = 0
+FCAL_LPFD_ADJ_MASK  = 0x0180   # bits 8:7
+FCAL_LPFD_ADJ_SHIFT = 7
+
 
 # ============================================================
 # Reference Input
@@ -74,7 +95,7 @@ PLL_R_PRE_SHIFT   = 0
 
 
 # ============================================================
-# PLL Core — INTEGER + FRACTIONAL
+# PLL Core — INTEGER MODE
 # ============================================================
 
 # ------------------------------------------------------------
@@ -86,7 +107,7 @@ PLL_N_REG         = 36   # R36  PLL_N[14:0]
 PLL_N_MASK        = 0x7FFF
 PLL_N_SHIFT       = 0
 
-# Legacy aliases — kept for compatibility but both point to R36
+# Legacy aliases — kept for compatibility, both point to R36
 PLL_N_LSB_REG     = 36
 PLL_N_MSB_REG     = 36
 
@@ -94,6 +115,7 @@ PLL_N_MSB_REG     = 36
 # ------------------------------------------------------------
 # Fractional Denominator DEN (32 bits)
 # Datasheet R38 = DEN[31:16], R39 = DEN[15:0]
+# In integer-N mode: DEN = 1 (R38=0x0000, R39=0x0001)
 # ------------------------------------------------------------
 
 PLL_DEN_MSB_REG   = 38   # R38  DEN[31:16]
@@ -106,7 +128,7 @@ PLL_DEN_LSB_SHIFT = 0
 
 
 # ------------------------------------------------------------
-# MASH Seed (R40, R41) — not PLL_NUM
+# MASH Seed (R40, R41)
 # Datasheet R40 = MASH_SEED[31:16], R41 = MASH_SEED[15:0]
 # ------------------------------------------------------------
 
@@ -117,6 +139,7 @@ MASH_SEED_LSB_REG = 41   # R41  MASH_SEED[15:0]
 # ------------------------------------------------------------
 # Fractional Numerator NUM (32 bits)
 # Datasheet R42 = NUM[31:16], R43 = NUM[15:0]
+# In integer-N mode: NUM = 0 (R42=0x0000, R43=0x0000)
 # ------------------------------------------------------------
 
 PLL_NUM_MSB_REG   = 42   # R42  NUM[31:16]
@@ -126,6 +149,22 @@ PLL_NUM_MSB_SHIFT = 0
 PLL_NUM_LSB_REG   = 43   # R43  NUM[15:0]
 PLL_NUM_LSB_MASK  = 0xFFFF
 PLL_NUM_LSB_SHIFT = 0
+
+
+# ------------------------------------------------------------
+# INSTCAL_PLL — Instant Calibration Value (32 bits)
+# Datasheet R44 = INSTCAL[31:16], R45 = INSTCAL[15:0]
+# Value = int(2^32 * NUM/DEN)
+# In integer-N mode: INSTCAL = 0 (NUM=0)
+# ------------------------------------------------------------
+
+INSTCAL_MSB_REG   = 44   # R44  INSTCAL_PLL[31:16]
+INSTCAL_MSB_MASK  = 0xFFFF
+INSTCAL_MSB_SHIFT = 0
+
+INSTCAL_LSB_REG   = 45   # R45  INSTCAL_PLL[15:0]
+INSTCAL_LSB_MASK  = 0xFFFF
+INSTCAL_LSB_SHIFT = 0
 
 
 # ------------------------------------------------------------
@@ -139,7 +178,7 @@ MASH_ORDER_MASK   = 0x0180   # bits 8:7
 MASH_ORDER_SHIFT  = 7
 
 # MASH_ORDER values
-MASH_INTEGER      = 0x0      # Integer mode
+MASH_INTEGER      = 0x0      # Integer mode (NUM=0)
 MASH_ORDER_1      = 0x1      # First order
 MASH_ORDER_2      = 0x2      # Second order
 MASH_ORDER_3      = 0x3      # Third order
@@ -152,6 +191,19 @@ PLL_FRAC_EN_REG   = 35
 PLL_FRAC_CTRL_REG = 35
 PLL_FRAC_EN_MASK  = MASH_ORDER_MASK
 PLL_FRAC_EN_SHIFT = MASH_ORDER_SHIFT
+
+
+# ============================================================
+# InstaCal_2x — R1 bit 1
+# Controls instant calibration doubler engagement
+# 0 = normal operation (no doubler or divider path)
+# 1 = doubler engaged (OUTA_MUX = 2)
+# Source: MIT Haystack Observatory driver
+# ============================================================
+
+INSTACAL_2X_REG   = 1    # R1
+INSTACAL_2X_MASK  = 0x0002   # bit 1
+INSTACAL_2X_SHIFT = 1
 
 
 # ============================================================
