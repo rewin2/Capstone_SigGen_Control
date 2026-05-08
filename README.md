@@ -3,7 +3,7 @@
 
 ## Installation:
 
-This repository require the spidev library to communicate with the LMX2820. This should be done in a virtual environment on Debian-based systems.
+This repository requires the spidev library to communicate with the LMX2820. This should be done in a virtual environment on Debian-based systems.
 
 ### Clone repository:
 
